@@ -6,6 +6,7 @@ import (
 )
 
 type ProviderConfig struct {
+	Name string
 	// BaseURL is a base URL (e.g. "https://api.openai.com/v1") that will be
 	// combined with a provider's default endpoint path when Endpoint is empty.
 	BaseURL string

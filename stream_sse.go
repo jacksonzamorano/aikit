@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 )
@@ -14,16 +13,7 @@ type sseEvent struct {
 	data  []byte
 }
 
-type ProviderError struct {
-	Data  string
-	Cause string
-}
-
-func (e *ProviderError) Error() string {
-	return fmt.Sprintf("An error occured during inferrence: %s\nData: %s", e.Cause, e.Data)
-}
-
-func readSSE(r io.Reader, onEvent func(sseEvent) (bool, error)) *ProviderError {
+func readSSE(provider string, r io.Reader, onEvent func(sseEvent) (bool, error)) error {
 	br := bufio.NewReader(r)
 	var ev sseEvent
 	var data bytes.Buffer
@@ -39,12 +29,13 @@ func readSSE(r io.Reader, onEvent func(sseEvent) (bool, error)) *ProviderError {
 		}
 		cont, handlerErr := onEvent(ev)
 		if handlerErr != nil {
-			if err, ok := handlerErr.(*ProviderError); ok {
+			if err, ok := handlerErr.(*AIError); ok {
 				return false, err
 			} else {
-				return false, &ProviderError{
-					Cause: handlerErr.Error(),
-					Data:  string(ev.data),
+				return false, &AIError{
+					Category: AIErrorCategoryStreamingError,
+					Provider: provider,
+					Message:  handlerErr.Error(),
 				}
 			}
 		}
@@ -55,9 +46,10 @@ func readSSE(r io.Reader, onEvent func(sseEvent) (bool, error)) *ProviderError {
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
-			return &ProviderError{
-				Cause: err.Error(),
-				Data:  line,
+			return &AIError{
+				Category: AIErrorCategoryStreamingError,
+				Provider: provider,
+				Message:  err.Error(),
 			}
 		}
 
@@ -71,12 +63,13 @@ func readSSE(r io.Reader, onEvent func(sseEvent) (bool, error)) *ProviderError {
 		if line == "" {
 			cont, err := flush()
 			if err != nil {
-				if err, ok := err.(*ProviderError); ok {
+				if err, ok := err.(*AIError); ok {
 					return err
 				} else {
-					return &ProviderError{
-						Cause: err.Error(),
-						Data:  string(ev.data),
+					return &AIError{
+						Category: AIErrorCategoryStreamingError,
+						Provider: provider,
+						Message:  err.Error(),
 					}
 				}
 			}

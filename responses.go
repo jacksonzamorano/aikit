@@ -15,6 +15,9 @@ type ResponsesAPI struct {
 	GenerateSummary bool
 }
 
+func (p *ResponsesAPI) Name() string {
+	return fmt.Sprintf("responses.%s", p.Config.Name)
+}
 func (p *ResponsesAPI) Transport() InferenceTransport {
 	return TransportSSE
 }
@@ -89,7 +92,7 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *ProviderState) ChunkResult
 
 	var data ResponsesStreamEvent
 	if err := json.Unmarshal(rawData, &data); err != nil {
-		return ErrorChunkResult(err)
+		return ErrorChunkResult(DecodingError("responses", err.Error()))
 	}
 	data.Raw = rawData
 
@@ -128,7 +131,11 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *ProviderState) ChunkResult
 		if msg == "" {
 			msg = string(data.Raw)
 		}
-		return ErrorChunkResult(fmt.Errorf("Responses stream error: %s", msg))
+		return ErrorChunkResult(UnknownError("responses", msg))
 	}
 	return EmptyChunkResult()
+}
+
+func (p *ResponsesAPI) ParseHttpError(code int, body []byte) *AIError {
+	return nil
 }

@@ -33,7 +33,7 @@ func DoneChunkResult() ChunkResult {
 		Error:   nil,
 	}
 }
-func ErrorChunkResult(err error) ChunkResult {
+func ErrorChunkResult(err *AIError) ChunkResult {
 	return ChunkResult{
 		Updated: false,
 		Error:   err,
@@ -70,8 +70,10 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 				resBytes, err := json.Marshal(res)
 				if err != nil {
 					s.State.Success = false
-					s.State.Error = &ProviderError{
-						Cause: err.Error(),
+					s.State.Error = &AIError{
+						Category: AIErrorCategoryToolResultError,
+						Message:  err.Error(),
+						Provider: s.Provider.Name(),
 					}
 					return s.State
 				}
@@ -88,17 +90,20 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 		}
 		if err != nil {
 			s.State.Success = false
-			s.State.Error = &ProviderError{
-				Cause: err.Error(),
-			}
+			s.State.Error = err
 			return s.State
 		}
 		if resp.StatusCode >= 300 {
 			err, _ := io.ReadAll(resp.Body)
 			s.State.Success = false
-			s.State.Error = &ProviderError{
-				Cause: fmt.Sprintf("Status %d", resp.StatusCode),
-				Data:  string(err),
+			if parsedErr := s.Provider.ParseHttpError(resp.StatusCode, err); parsedErr != nil {
+				s.State.Error = parsedErr
+			} else {
+				s.State.Error = &AIError{
+					Category: AIErrorCategoryHTTPStatus,
+					Message:  fmt.Sprintf("Received status code %d with body %s", resp.StatusCode, string(err)),
+					Provider: s.Provider.Name(),
+				}
 			}
 			return s.State
 		}
@@ -109,7 +114,7 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 		transport := s.Provider.Transport()
 		switch transport {
 		case TransportSSE:
-			err := readSSE(resp.Body, func(ev sseEvent) (bool, error) {
+			err := readSSE(s.Provider.Name(), resp.Body, func(ev sseEvent) (bool, error) {
 				if len(ev.data) == 0 {
 					return true, nil
 				}
@@ -137,9 +142,7 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 			}
 			if err != nil {
 				s.State.Success = false
-				s.State.Error = &ProviderError{
-					Cause: err.Error(),
-				}
+				s.State.Error = err
 				return s.State
 			} else if s.State.incompleteToolCalls == 0 {
 				s.State.Success = true
