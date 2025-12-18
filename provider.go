@@ -95,12 +95,17 @@ type InferenceBlock struct {
 }
 
 type ProviderState struct {
-	Success    bool                `json:"success"`
-	Error      *ProviderError      `json:"error,omitempty"`
-	Result     ProviderStateResult `json:"result"`
-	Provider   string              `json:"provider,omitempty"`
-	Model      string              `json:"model,omitempty"`
-	ResponseID string              `json:"response_id,omitempty"`
+	WebSearchEnabled bool             `json:"web_search"`
+	ReasoningEffort  string           `json:"reasoning_effort"`
+	Tools            []ToolDefinition `json:"tools"`
+
+	Success bool                `json:"success"`
+	Error   *ProviderError      `json:"error,omitempty"`
+	Result  ProviderStateResult `json:"result"`
+
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	ResponseID string `json:"response_id,omitempty"`
 
 	Blocks []*InferenceBlock `json:"blocks"`
 }
