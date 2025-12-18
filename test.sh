@@ -1,5 +1,5 @@
 #!/bin/bash
-# scripts/test.sh
+rm -rf tests
 set -a
 source .env
 set +a

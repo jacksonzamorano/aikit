@@ -3,8 +3,9 @@ package aikit
 import "encoding/json"
 
 type VertexRequest struct {
-	Contents []VertexContent `json:"contents"`
-	Tools    VertexTools     `json:"tools"`
+	SystemInstruction *VertexContent  `json:"system_instruction,omitempty"`
+	Contents          []VertexContent `json:"contents"`
+	Tools             VertexTools     `json:"tools"`
 }
 type VertexTools struct {
 	FunctionDeclarations []map[string]any `json:"functionDeclarations,omitempty"`
@@ -20,7 +21,8 @@ type VertexUsageMetadata struct {
 	ThinkingTokens int64 `json:"thinkingTokenCount"`
 }
 type VertexCandidate struct {
-	Content VertexContent `json:"content"`
+	Content      VertexContent `json:"content"`
+	FinishReason *string       `json:"finishReason,omitempty"`
 }
 type VertexContent struct {
 	Role  string       `json:"role,omitempty"`
