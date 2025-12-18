@@ -101,7 +101,7 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *ProviderState) ChunkResult 
 
 	var chunk CompletionsStreamChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
-		return ErrorChunkResult(DecodingError("completions", err.Error()))
+		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
 
 	if chunk.Usage != nil {
@@ -149,6 +149,22 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *ProviderState) ChunkResult 
 }
 
 func (p *CompletionsAPI) ParseHttpError(code int, body []byte) *AIError {
-	return nil
+	var errResp CompletionsErrorResponse
+	if err := json.Unmarshal(body, &errResp); err == nil {
+		switch errResp.Error.Type {
+		case "invalid_request_error":
+			return ConfigurationError(p.Name(), errResp.Error.Message)
+		case "authentication_error":
+			return AuthenticationError(p.Name(), errResp.Error.Message)
+		case "rate_limit_error":
+			return RateLimitError(p.Name(), errResp.Error.Message)
+		}
+	}
+	switch code {
+	case 401, 403:
+		return AuthenticationError(p.Name(), string(body))
+	case 429:
+		return RateLimitError(p.Name(), string(body))
+	}
+	return UnknownError(p.Name(), errResp.Error.Message)
 }
-

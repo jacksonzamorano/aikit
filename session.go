@@ -101,7 +101,7 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 			} else {
 				s.State.Error = &AIError{
 					Category: AIErrorCategoryHTTPStatus,
-					Message:  fmt.Sprintf("Received status code %d with body %s", resp.StatusCode, string(err)),
+					Message:  fmt.Sprintf("Unhandled error. Received status code %d with body %s", resp.StatusCode, string(err)),
 					Provider: s.Provider.Name(),
 				}
 			}
