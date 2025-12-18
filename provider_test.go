@@ -86,7 +86,7 @@ func TestAnthropicStream(t *testing.T) {
 func TestXAI(t *testing.T) {
 	all := ""
 
-	session := MakeRequest(aikit.XAIProvider(os.Getenv("XAI_KEY")), "grok-4-1-fast-reasoning", nil)
+	session := MakeRequest(aikit.XAIProvider(os.Getenv("XAI_KEY")), "grok-4-1-fast-reasoning-latest", nil)
 	session.Debug = testDebugEnabled
 	result := session.Stream(func(result *aikit.ProviderState) {
 		all += SnapshotResult(*result)

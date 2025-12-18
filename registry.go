@@ -52,7 +52,7 @@ func XAIProvider(key string) InferenceProvider {
 	return &CompletionsAPI{
 		Config: ProviderConfig{
 			Name:    "xai",
-			BaseURL: "https://api.x.ai/v1",
+			BaseURL: "https://api.x.ai",
 			APIKey:  key,
 		},
 	}
