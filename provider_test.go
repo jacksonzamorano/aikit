@@ -19,7 +19,7 @@ func TestGROQ(t *testing.T) {
 	})
 	all += SnapshotResult(*result)
 
-	VerifyResults(t, all, *result)
+	VerifyResults(t, session.Provider.Name(), all, *result)
 }
 
 var openaiTestReasoningEffort = "high"
@@ -34,7 +34,7 @@ func TestOpenAI(t *testing.T) {
 	})
 	all += SnapshotResult(*result)
 
-	VerifyResults(t, all, *result)
+	VerifyResults(t, session.Provider.Name(), all, *result)
 }
 
 var googleTestReasoningEffort = "1024"
@@ -50,7 +50,7 @@ func TestGoogle(t *testing.T) {
 	})
 	all += SnapshotResult(*result)
 
-	VerifyResults(t, all, *result)
+	VerifyResults(t, session.Provider.Name(), all, *result)
 }
 
 var fireworksReasoningEffort = "low"
@@ -65,7 +65,7 @@ func TestFireworks(t *testing.T) {
 	})
 	all += SnapshotResult(*result)
 
-	VerifyResults(t, all, *result)
+	VerifyResults(t, session.Provider.Name(), all, *result)
 }
 
 var anthropicReasoningEffort = "1024"
@@ -80,7 +80,7 @@ func TestAnthropicStream(t *testing.T) {
 	})
 	all += SnapshotResult(*result)
 
-	VerifyResults(t, all, *result)
+	VerifyResults(t, session.Provider.Name(), all, *result)
 }
 
 func TestXAI(t *testing.T) {
@@ -93,5 +93,5 @@ func TestXAI(t *testing.T) {
 	})
 	all += SnapshotResult(*result)
 
-	VerifyResults(t, all, *result)
+	VerifyResults(t, session.Provider.Name(), all, *result)
 }
