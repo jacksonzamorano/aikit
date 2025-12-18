@@ -1,0 +1,32 @@
+name: Go Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Download dependencies
+        run: go mod download
+      
+      - name: Run tests
+        env:
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          XAI_KEY: ${{ secrets.XAI_KEY }}
+          GOOGLE_KEY: ${{ secrets.GOOGLE_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          FIREWORKS_KEY: ${{ secrets.FIREWORKS_KEY }}
+        run: go test -v ./...

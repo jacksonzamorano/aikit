@@ -1,0 +1,37 @@
+package aikit
+
+import "encoding/json"
+
+type VertexGenerateContentResponse struct {
+	Candidates []VertexCandidate   `json:"candidates"`
+	Usage      VertexUsageMetadata `json:"usageMetadata"`
+}
+type VertexUsageMetadata struct {
+	InputTokens    int64 `json:"promptTokenCount"`
+	OutputTokens   int64 `json:"candidatesTokenCount"`
+	CachedTokens   int64 `json:"cachedContentTokenCount"`
+	ThinkingTokens int64 `json:"thinkingTokenCount"`
+}
+type VertexCandidate struct {
+	Content VertexContent `json:"content"`
+}
+type VertexContent struct {
+	Role  string       `json:"role,omitempty"`
+	Parts []VertexPart `json:"parts,omitempty"`
+}
+type VertexPart struct {
+	Thought          bool                  `json:"thought,omitempty"`
+	ThoughtSignature string                `json:"thoughtSignature,omitempty"`
+	Text             string                `json:"text,omitempty"`
+	FunctionCall     *VertexFunctionCall   `json:"functionCall,omitempty"`
+	FunctionResult   *VertexFunctionResult `json:"functionResponse,omitempty"`
+}
+type VertexFunctionCall struct {
+	Name string          `json:"name,omitempty"`
+	Args json.RawMessage `json:"args,omitempty"`
+}
+type VertexFunctionResult struct {
+	Id       string          `json:"id,omitempty"`
+	Name     string          `json:"name,omitempty"`
+	Response json.RawMessage `json:"response,omitempty"`
+}
