@@ -7,22 +7,22 @@ import (
 	"net/url"
 )
 
-type GoogleAPI struct {
+type AIStudioAPI struct {
 	Config  ProviderConfig
-	Request VertexRequest
+	Request AIStudioRequest
 }
 
-func (p *GoogleAPI) Name() string {
+func (p *AIStudioAPI) Name() string {
 	return "google." + p.Config.Name
 }
-func (p *GoogleAPI) Transport() InferenceTransport {
+func (p *AIStudioAPI) Transport() GatewayTransport {
 	return TransportSSE
 }
 
-func (p *GoogleAPI) PrepareForUpdates() {
+func (p *AIStudioAPI) PrepareForUpdates() {
 }
 
-func (p *GoogleAPI) InitSession(state *ProviderState) {
+func (p *AIStudioAPI) InitSession(state *Thread) {
 	tools := []map[string]any{}
 	for k := range state.Tools {
 		tool := map[string]any{}
@@ -32,42 +32,42 @@ func (p *GoogleAPI) InitSession(state *ProviderState) {
 		tools = append(tools, tool)
 	}
 
-	p.Request = VertexRequest{
-		Contents: []VertexContent{},
-		Tools: VertexTools{
+	p.Request = AIStudioRequest{
+		Contents: []AIStudioContent{},
+		Tools: AIStudioTools{
 			FunctionDeclarations: tools,
 		},
 	}
 }
 
-func (p *GoogleAPI) Update(block *InferenceBlock) {
+func (p *AIStudioAPI) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
-		p.Request.Contents = append(p.Request.Contents, VertexContent{
+		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
 			Role: "user",
-			Parts: []VertexPart{
+			Parts: []AIStudioPart{
 				{Text: block.Text},
 			},
 		})
 	case InferenceBlockSystem:
-		p.Request.SystemInstruction = &VertexContent{
-			Parts: []VertexPart{
+		p.Request.SystemInstruction = &AIStudioContent{
+			Parts: []AIStudioPart{
 				{Text: block.Text},
 			},
 		}
 	case InferenceBlockThinking:
-		p.Request.Contents = append(p.Request.Contents, VertexContent{
+		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
 			Role: "model",
-			Parts: []VertexPart{
+			Parts: []AIStudioPart{
 				{Text: block.Text, Thought: true, ThoughtSignature: block.Signature},
 			},
 		})
 	case InferenceBlockToolCall:
-		p.Request.Contents = append(p.Request.Contents, VertexContent{
+		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
 			Role: "model",
-			Parts: []VertexPart{
+			Parts: []AIStudioPart{
 				{
-					FunctionCall: &VertexFunctionCall{
+					FunctionCall: &AIStudioFunctionCall{
 						Name: block.ToolCall.Name,
 						Args: block.ToolCall.Arguments,
 					},
@@ -77,11 +77,11 @@ func (p *GoogleAPI) Update(block *InferenceBlock) {
 			},
 		})
 	case InferenceBlockToolResult:
-		p.Request.Contents = append(p.Request.Contents, VertexContent{
+		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
 			Role: "model",
-			Parts: []VertexPart{
+			Parts: []AIStudioPart{
 				{
-					FunctionResult: &VertexFunctionResult{
+					FunctionResult: &AIStudioFunctionResult{
 						Id:       block.ToolResult.ToolCallID,
 						Name:     block.ToolCall.Name,
 						Response: block.ToolResult.Output,
@@ -92,7 +92,7 @@ func (p *GoogleAPI) Update(block *InferenceBlock) {
 	}
 }
 
-func (p GoogleAPI) MakeRequest(state *ProviderState) *http.Request {
+func (p AIStudioAPI) MakeRequest(state *Thread) *http.Request {
 	modelsBase := p.Config.resolveEndpoint("/v1beta/models/")
 	endpoint, _ := url.JoinPath(modelsBase, state.Model+":streamGenerateContent")
 	u, _ := url.Parse(endpoint)
@@ -106,8 +106,8 @@ func (p GoogleAPI) MakeRequest(state *ProviderState) *http.Request {
 	return providerReq
 }
 
-func (p GoogleAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
-	var chunk VertexGenerateContentResponse
+func (p AIStudioAPI) OnChunk(data []byte, state *Thread) ChunkResult {
+	var chunk AIStudioGenerateContentResponse
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
@@ -141,8 +141,8 @@ func (p GoogleAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
 	return EmptyChunkResult()
 }
 
-func (p GoogleAPI) ParseHttpError(code int, body []byte) *AIError {
-	var data VertexErrorResponse
+func (p AIStudioAPI) ParseHttpError(code int, body []byte) *AIError {
+	var data AIStudioErrorResponse
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil
 	}

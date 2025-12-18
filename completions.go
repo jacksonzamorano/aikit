@@ -18,13 +18,13 @@ func (p *CompletionsAPI) Name() string {
 	return fmt.Sprintf("completions.%s", p.Config.Name)
 }
 
-func (p *CompletionsAPI) Transport() InferenceTransport {
+func (p *CompletionsAPI) Transport() GatewayTransport {
 	return TransportSSE
 }
 
 func (p *CompletionsAPI) PrepareForUpdates() {}
 
-func (p *CompletionsAPI) InitSession(state *ProviderState) {
+func (p *CompletionsAPI) InitSession(state *Thread) {
 	tools := make([]map[string]any, 0)
 	for name := range state.Tools {
 		toolSpec := map[string]any{}
@@ -48,7 +48,7 @@ func (p *CompletionsAPI) InitSession(state *ProviderState) {
 	}
 }
 
-func (p *CompletionsAPI) Update(block *InferenceBlock) {
+func (p *CompletionsAPI) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
 		p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
@@ -86,7 +86,7 @@ func (p *CompletionsAPI) Update(block *InferenceBlock) {
 	}
 }
 
-func (p *CompletionsAPI) MakeRequest(state *ProviderState) *http.Request {
+func (p *CompletionsAPI) MakeRequest(state *Thread) *http.Request {
 	endpoint := p.Config.resolveEndpoint("/v1/chat/completions")
 	body, _ := json.Marshal(p.Request)
 	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
@@ -96,7 +96,7 @@ func (p *CompletionsAPI) MakeRequest(state *ProviderState) *http.Request {
 	return providerReq
 }
 
-func (p *CompletionsAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
+func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 	dirty := false
 
 	var chunk CompletionsStreamChunk

@@ -18,7 +18,7 @@ type ResponsesAPI struct {
 func (p *ResponsesAPI) Name() string {
 	return fmt.Sprintf("responses.%s", p.Config.Name)
 }
-func (p *ResponsesAPI) Transport() InferenceTransport {
+func (p *ResponsesAPI) Transport() GatewayTransport {
 	return TransportSSE
 }
 
@@ -26,7 +26,7 @@ func (p *ResponsesAPI) PrepareForUpdates() {
 	p.Request.Inputs = []ResponsesInput{}
 }
 
-func (p *ResponsesAPI) InitSession(state *ProviderState) {
+func (p *ResponsesAPI) InitSession(state *Thread) {
 	tools := []ResponsesTool{}
 	for k := range state.Tools {
 		tool := ResponsesTool{
@@ -55,7 +55,7 @@ func (p *ResponsesAPI) InitSession(state *ProviderState) {
 	}
 }
 
-func (p *ResponsesAPI) Update(block *InferenceBlock) {
+func (p *ResponsesAPI) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
 		p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{
@@ -79,7 +79,7 @@ func (p *ResponsesAPI) Update(block *InferenceBlock) {
 	}
 }
 
-func (p *ResponsesAPI) MakeRequest(state *ProviderState) *http.Request {
+func (p *ResponsesAPI) MakeRequest(state *Thread) *http.Request {
 	body, _ := json.Marshal(p.Request)
 	providerReq, _ := http.NewRequest("POST", p.Config.resolveEndpoint("/v1/responses"), bytes.NewReader(body))
 	providerReq.Header.Add("Content-Type", "application/json")
@@ -88,7 +88,7 @@ func (p *ResponsesAPI) MakeRequest(state *ProviderState) *http.Request {
 	return providerReq
 }
 
-func (p *ResponsesAPI) OnChunk(rawData []byte, state *ProviderState) ChunkResult {
+func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 
 	var data ResponsesStreamEvent
 	if err := json.Unmarshal(rawData, &data); err != nil {
