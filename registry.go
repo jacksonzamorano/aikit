@@ -43,3 +43,11 @@ func AnthropicProvider(key string) InferenceProvider {
 		},
 	}
 }
+func XAIProvider(key string) InferenceProvider {
+	return &CompletionsAPI{
+		Config: ProviderConfig{
+			BaseURL: "https://api.x.ai/v1",
+			APIKey:  key,
+		},
+	}
+}

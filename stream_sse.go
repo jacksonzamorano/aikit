@@ -20,7 +20,7 @@ type ProviderError struct {
 }
 
 func (e *ProviderError) Error() string {
-	return fmt.Sprintf("-- Error --\n\tError: %s\n\tData: %s\n------------", e.Cause, e.Data)
+	return fmt.Sprintf("An error occured during inferrence: %s\nData: %s", e.Cause, e.Data)
 }
 
 func readSSE(r io.Reader, onEvent func(sseEvent) (bool, error)) *ProviderError {
