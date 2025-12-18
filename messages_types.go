@@ -8,7 +8,8 @@ type MessagesRequest struct {
 	Tools     []map[string]any  `json:"tools"`
 	System    string            `json:"system"`
 	MaxTokens int64             `json:"max_tokens"`
-	Thinking  MessagesThinking  `json:"thinking"`
+	Thinking  *MessagesThinking `json:"thinking"`
+	Stream    bool              `json:"stream"`
 }
 type MessagesMessage struct {
 	Role    string            `json:"role"`
@@ -114,6 +115,10 @@ type MessagesStreamContentBlockStart struct {
 }
 
 type MessagesStreamContentDelta struct {
+	Type  string                         `json:"type"`
+	Delta MessagesStreamContentDeltaData `json:"delta"`
+}
+type MessagesStreamContentDeltaData struct {
 	Type        string `json:"type"`
 	Text        string `json:"text,omitempty"`
 	Thinking    string `json:"thinking,omitempty"`
