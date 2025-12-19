@@ -35,3 +35,11 @@ func GroqProvider(key string) InferenceProvider {
 		},
 	}
 }
+func AnthropicProvider(key string) InferenceProvider {
+	return &MessagesAPI{
+		Config: ProviderConfig{
+			BaseURL: "https://api.anthropic.com",
+			APIKey:  key,
+		},
+	}
+}

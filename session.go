@@ -63,9 +63,6 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 		// Update blocks from last turn.
 		// Will also handle tool calls synchronously.
 		for lastBlock < len(s.State.Blocks) {
-			if s.Debug {
-				log.Printf("[Session] Updating block %d of type %s", lastBlock, s.State.Blocks[lastBlock].Type)
-			}
 			switch s.State.Blocks[lastBlock].Type {
 			case InferenceBlockToolCall:
 				block := s.State.Blocks[lastBlock]
@@ -86,7 +83,9 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 
 		req := s.Provider.MakeRequest(s.State)
 		resp, err := http.DefaultClient.Do(req)
-		log.Printf("[Session] Request made to %s", req.URL.String())
+		if s.Debug {
+			log.Printf("[Session] Request made to %s", req.URL.String())
+		}
 		if err != nil {
 			s.State.Success = false
 			s.State.Error = &ProviderError{
@@ -103,6 +102,9 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 			}
 			return s.State
 		}
+		if s.Debug {
+			log.Printf("[Session] Response status: %s", resp.Status)
+		}
 		defer resp.Body.Close()
 		transport := s.Provider.Transport()
 		switch transport {
@@ -113,6 +115,9 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 				}
 				if string(ev.data) == "[DONE]" {
 					return false, nil
+				}
+				if s.Debug {
+					log.Printf("[Session] SSE Event: %s", string(ev.data))
 				}
 				result := s.Provider.OnChunk(ev.data, s.State)
 				if result.Updated {
@@ -128,7 +133,7 @@ func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
 			})
 			if s.Debug {
 				dbg, _ := json.MarshalIndent(s.State, "", "  ")
-				log.Printf("[Session] Incomplete calls: %d. State: %s", s.State.incompleteToolCalls, string(dbg))
+				log.Printf("[Session] %s", string(dbg))
 			}
 			if err != nil {
 				s.State.Success = false
