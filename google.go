@@ -12,6 +12,9 @@ type GoogleAPI struct {
 	Request VertexRequest
 }
 
+func (p *GoogleAPI) Name() string {
+	return "google." + p.Config.Name
+}
 func (p *GoogleAPI) Transport() InferenceTransport {
 	return TransportSSE
 }
@@ -106,9 +109,8 @@ func (p GoogleAPI) MakeRequest(state *ProviderState) *http.Request {
 func (p GoogleAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
 	var chunk VertexGenerateContentResponse
 	if err := json.Unmarshal(data, &chunk); err != nil {
-		return ErrorChunkResult(err)
+		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
-
 	state.Result.InputTokens += chunk.Usage.InputTokens
 	state.Result.OutputTokens += chunk.Usage.OutputTokens
 	state.Result.CacheReadTokens += chunk.Usage.CachedTokens
@@ -137,4 +139,19 @@ func (p GoogleAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
 		}
 	}
 	return EmptyChunkResult()
+}
+
+func (p GoogleAPI) ParseHttpError(code int, body []byte) *AIError {
+	var data VertexErrorResponse
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil
+	}
+	switch data.Error.Code {
+	case 401:
+		return AuthenticationError(p.Name(), data.Error.Message)
+	case 429:
+		return RateLimitError(p.Name(), data.Error.Message)
+	default:
+		return UnknownError(p.Name(), data.Error.Message)
+	}
 }

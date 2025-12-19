@@ -2,6 +2,14 @@ package aikit
 
 import "encoding/json"
 
+type MessagesErrorResponse struct {
+	Error MessagesError `json:"error"`
+}
+type MessagesError struct {
+	Message string `json:"message,omitempty"`
+	Type    string `json:"type,omitempty"`
+}
+
 type MessagesRequest struct {
 	Model     string            `json:"model"`
 	Messages  []MessagesMessage `json:"messages"`
@@ -62,14 +70,9 @@ type MessagesStreamEnvelope struct {
 	Type string `json:"type"`
 }
 
-type MessagesStreamError struct {
-	Message string `json:"message,omitempty"`
-	Type    string `json:"type,omitempty"`
-}
-
 type MessagesStreamErrorEvent struct {
-	Type  string               `json:"type"`
-	Error *MessagesStreamError `json:"error,omitempty"`
+	Type  string         `json:"type"`
+	Error *MessagesError `json:"error,omitempty"`
 }
 
 type MessagesStreamMessage struct {

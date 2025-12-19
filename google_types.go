@@ -11,8 +11,15 @@ type VertexTools struct {
 	FunctionDeclarations []map[string]any `json:"functionDeclarations,omitempty"`
 }
 type VertexGenerateContentResponse struct {
-	Candidates []VertexCandidate   `json:"candidates"`
-	Usage      VertexUsageMetadata `json:"usageMetadata"`
+	Candidates []VertexCandidate    `json:"candidates"`
+	Usage      VertexUsageMetadata  `json:"usageMetadata"`
+}
+type VertexErrorResponse struct {
+	Error VertexErrorResponseError `json:"error,omitempty"`
+}
+type VertexErrorResponseError struct {
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 type VertexUsageMetadata struct {
 	InputTokens    int64 `json:"promptTokenCount"`

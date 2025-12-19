@@ -14,6 +14,10 @@ type CompletionsAPI struct {
 	lastTool string
 }
 
+func (p *CompletionsAPI) Name() string {
+	return fmt.Sprintf("completions.%s", p.Config.Name)
+}
+
 func (p *CompletionsAPI) Transport() InferenceTransport {
 	return TransportSSE
 }
@@ -97,7 +101,7 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *ProviderState) ChunkResult 
 
 	var chunk CompletionsStreamChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
-		return ErrorChunkResult(err)
+		return ErrorChunkResult(DecodingError("completions", err.Error()))
 	}
 
 	if chunk.Usage != nil {
@@ -143,3 +147,8 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *ProviderState) ChunkResult 
 	}
 	return EmptyChunkResult()
 }
+
+func (p *CompletionsAPI) ParseHttpError(code int, body []byte) *AIError {
+	return nil
+}
+

@@ -47,7 +47,7 @@ type ProviderState struct {
 	HandleToolFunction func(name string, args json.RawMessage) any `json:"-"`
 
 	Success bool                `json:"success"`
-	Error   *ProviderError      `json:"error,omitempty"`
+	Error   error               `json:"error,omitempty"`
 	Result  ProviderStateResult `json:"result"`
 
 	Model      string `json:"model,omitempty"`
@@ -201,9 +201,11 @@ func (s *ProviderState) ToolResult(toolCall *InferenceToolCall, output json.RawM
 }
 
 type InferenceProvider interface {
+	Name() string
 	Transport() InferenceTransport
 	InitSession(state *ProviderState)
 	PrepareForUpdates()
+	ParseHttpError(code int, body []byte) *AIError
 	Update(block *InferenceBlock)
 	MakeRequest(state *ProviderState) *http.Request
 	OnChunk(data []byte, state *ProviderState) ChunkResult
