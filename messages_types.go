@@ -45,7 +45,7 @@ type MessagesContent struct {
 	Text         string                    `json:"text,omitempty"`
 	Name         string                    `json:"name,omitempty"`
 	Id           string                    `json:"id,omitempty"`
-	Input        any                       `json:"input,omitempty"`
+	Input        json.RawMessage           `json:"input,omitempty"`
 	ToolUseId    string                    `json:"tool_use_id,omitempty"`
 	Content      any                       `json:"content,omitempty"`
 	CacheControl *MessagesCacheControl     `json:"cache_control,omitempty"`
@@ -123,17 +123,22 @@ type MessagesStreamContentBlockStart struct {
 
 type MessagesStreamContentDelta struct {
 	Type  string                         `json:"type"`
+	Index int                            `json:"index"`
 	Delta MessagesStreamContentDeltaData `json:"delta"`
 }
 type MessagesStreamContentDeltaData struct {
-	Type        string `json:"type"`
-	Text        string `json:"text,omitempty"`
-	Thinking    string `json:"thinking,omitempty"`
-	Signature   string `json:"signature,omitempty"`
-	Data        string `json:"data,omitempty"`
-	PartialJSON string `json:"partial_json,omitempty"`
-	Title       string `json:"title,omitempty"`
-	URL         string `json:"url,omitempty"`
+	Type        string                              `json:"type"`
+	Text        string                              `json:"text,omitempty"`
+	Thinking    string                              `json:"thinking,omitempty"`
+	Signature   string                              `json:"signature,omitempty"`
+	Data        string                              `json:"data,omitempty"`
+	PartialJSON string                              `json:"partial_json,omitempty"`
+	Title       string                              `json:"title,omitempty"`
+	URL         string                              `json:"url,omitempty"`
+	Citation    *MessagesStreamContentDeltaCitation `json:"citation,omitempty"`
+}
+type MessagesStreamContentDeltaCitation struct {
+	Url string `json:"url"`
 }
 
 type MessagesStreamContentBlockDelta struct {
@@ -161,4 +166,8 @@ type MessagesBuilderBlock struct {
 
 type MessagesWebSearchQuery struct {
 	Query string `json:"query"`
+}
+
+type MessagesWebFetchQuery struct {
+	URL string `json:"url"`
 }

@@ -37,7 +37,8 @@ func MakeRequest(t *testing.T, provider aikit.Gateway, modelname string, reasoni
 	if reasoning != nil {
 		state.ReasoningEffort = *reasoning
 	}
-	state.HandleToolFunction = func(name string, args json.RawMessage) any {
+	state.CoalesceTextBlocks = true
+	state.HandleToolFunction = func(name string, args string) any {
 		switch name {
 		case "get_time":
 			return toolResponse{
@@ -63,6 +64,7 @@ func MakeSearchRequest(t *testing.T, provider aikit.Gateway, modelname string, r
 	state := aikit.NewProviderState()
 	state.Model = modelname
 	state.MaxWebSearches = 1
+	state.CoalesceTextBlocks = true
 	state.System("You are a helpful assistant. Always check for the most up-to-date information.")
 	state.Input("What's new in the newest version of React? Keep your answer concise.")
 	if reasoning != nil {
@@ -78,7 +80,7 @@ func MakeSearchRequest(t *testing.T, provider aikit.Gateway, modelname string, r
 }
 
 func SnapshotResult(results aikit.Thread) string {
-	bytes, err := json.MarshalIndent(results, "", "  ")
+	bytes, err := json.MarshalIndent(results.Blocks, "", "  ")
 	if err != nil {
 		panic(err)
 	}
@@ -91,10 +93,11 @@ func VerifyResults(t *testing.T, name string, results string, result aikit.Threa
 		panic(err)
 	}
 	testPath := path.Join(cwd, "tests")
-	testRunPath := path.Join(testPath, fmt.Sprintf("run_%s_%d.json", name, time.Now().UnixNano()))
 	os.MkdirAll(testPath, 0755)
 	results_cleaned := fmt.Sprintf("[%s]", strings.TrimRight(results, ","))
+	testRunPath := path.Join(testPath, fmt.Sprintf("run_%s_%d.json", name, time.Now().UnixNano()))
 	os.WriteFile(testRunPath, []byte(results_cleaned), 0644)
+
 	t.Helper()
 	if !result.Success {
 		t.Error(result.Error)

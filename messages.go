@@ -12,17 +12,22 @@ type messagesLastToolCall struct {
 	ID       string
 	IsServer bool
 	Buffer   string
+	ToolName string
 }
 
 // MessagesAPI implements the Messages API shape (Anthropic-style).
 // Configurable BaseURL/Endpoint allows pointing at compatible endpoints.
 type MessagesAPI struct {
-	Config       ProviderConfig
-	Request      MessagesRequest
-	Version      string
-	BetaFeatures []string
+	Config               ProviderConfig
+	Request              MessagesRequest
+	Version              string
+	BetaFeatures         []string
 
 	lastToolCall messagesLastToolCall
+}
+
+func (p *MessagesAPI) blockId(thread *Thread, index int) string {
+	return fmt.Sprintf("%s.%d", thread.ThreadId, index)
 }
 
 func (p *MessagesAPI) Name() string {
@@ -45,11 +50,17 @@ func (p *MessagesAPI) InitSession(state *Thread) {
 		tools = append(tools, toolSpec)
 	}
 
-	if state.MaxWebSearches > 0 {
+	if state.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
 		tools = append(tools, map[string]any{
-			"type":     "web_search_20250305",
+			"type":     p.Config.WebSearchToolName,
 			"name":     "web_search",
 			"max_uses": state.MaxWebSearches,
+		})
+	}
+	if state.WebFetchEnabled && p.Config.WebFetchToolName != "" {
+		tools = append(tools, map[string]any{
+			"type": p.Config.WebFetchToolName,
+			"name": "web_fetch",
 		})
 	}
 
@@ -126,23 +137,22 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 					Type:  "tool_use",
 					Name:  block.ToolCall.Name,
 					Id:    block.ToolCall.ID,
-					Input: block.ToolCall.Arguments,
+					Input: []byte(block.ToolCall.Arguments),
 				},
 			},
 		})
-	case InferenceBlockToolResult:
-		fmt, _ := json.Marshal(block.ToolResult.Output)
-		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
-			Role: "user",
-			Content: []MessagesContent{
-				{
-					Type:      "tool_result",
-					Content:   fmt,
-					ToolUseId: block.ToolCall.ID,
+		if block.ToolResult != nil {
+			p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+				Role: "user",
+				Content: []MessagesContent{
+					{
+						Type:      "tool_result",
+						Content:   []byte(block.ToolResult.Output),
+						ToolUseId: block.ToolCall.ID,
+					},
 				},
-			},
-		})
-
+			})
+		}
 	}
 }
 
@@ -164,16 +174,12 @@ func (p *MessagesAPI) MakeRequest(state *Thread) *http.Request {
 }
 
 func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
-	dirty := false
-
 	var env MessagesStreamEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
 
 	switch env.Type {
-	case "ping":
-		return EmptyChunkResult()
 	case "error":
 		var e MessagesStreamErrorEvent
 		if err := json.Unmarshal(data, &e); err == nil && e.Error != nil && e.Error.Message != "" {
@@ -191,15 +197,14 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 	case "message_start":
 		var ms MessagesStreamMessageStart
 		if err := json.Unmarshal(data, &ms); err == nil {
-			if state.ResponseID == "" && ms.Message.ID != "" {
-				state.ResponseID = ms.Message.ID
+			if state.ThreadId == "" && ms.Message.ID != "" {
+				state.ThreadId = ms.Message.ID
 			}
 			usage := ms.Message.Usage
 			state.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
 			state.Result.CacheReadTokens += usage.CacheReadInputTokens
 			state.Result.CacheWriteTokens += usage.CacheCreationInputTokens
 			state.Result.OutputTokens += usage.OutputTokens
-			dirty = true
 		}
 	case "message_delta":
 		var md MessagesStreamMessageDelta
@@ -209,27 +214,38 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 			state.Result.OutputTokens += usage.OutputTokens
 			state.Result.CacheReadTokens += usage.CacheReadInputTokens
 			state.Result.CacheWriteTokens += usage.CacheCreationInputTokens
-			dirty = true
 		}
 	case "content_block_start":
 		var cbs MessagesStreamContentBlockStart
 		if err := json.Unmarshal(data, &cbs); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 		}
+		blockId := p.blockId(state, cbs.Index)
 		switch cbs.ContentBlock.Type {
 		case "thinking":
-			state.Thinking(cbs.ContentBlock.Thinking)
-			state.ThinkingSignature(cbs.ContentBlock.Signature)
+			state.Thinking(blockId, cbs.ContentBlock.Thinking)
+			state.ThinkingSignature(blockId, cbs.ContentBlock.Signature)
 		case "redacted_thinking":
 			state.EncryptedThinking(cbs.ContentBlock.Data)
 		case "tool_use":
-			state.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.ID, cbs.ContentBlock.Name, cbs.ContentBlock.Input)
+			state.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, string(cbs.ContentBlock.Input))
 			p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: false}
 		case "server_tool_use":
 			switch cbs.ContentBlock.Name {
 			case "web_search":
 				state.WebSearch(cbs.ContentBlock.ID)
-				p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: true}
+				p.lastToolCall = messagesLastToolCall{
+					ID:       cbs.ContentBlock.ID,
+					IsServer: true,
+					ToolName: "web_search",
+				}
+			case "web_fetch":
+				state.ViewWebpage(cbs.ContentBlock.ID)
+				p.lastToolCall = messagesLastToolCall{
+					ID:       cbs.ContentBlock.ID,
+					IsServer: true,
+					ToolName: "web_fetch",
+				}
 			}
 		case "web_search_tool_result":
 			for _, search := range cbs.ContentBlock.Content {
@@ -240,30 +256,33 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 			}
 			state.CompleteWebSearch(cbs.ContentBlock.ToolUseId)
 		case "text":
-			state.Text(cbs.ContentBlock.Text)
+			state.Text(blockId, cbs.ContentBlock.Text)
 		}
-		dirty = true
 	case "content_block_delta":
 		var cbd MessagesStreamContentDelta
 		if err := json.Unmarshal(data, &cbd); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 		}
+		blockId := p.blockId(state, cbd.Index)
 
 		switch cbd.Delta.Type {
 		case "text_delta":
-			state.Text(cbd.Delta.Text)
+			state.Text(blockId, cbd.Delta.Text)
+		case "citations_delta":
+			if cbd.Delta.Citation != nil {
+				state.Cite(blockId, cbd.Delta.Citation.Url)
+			}
 		case "thinking_delta":
-			state.Thinking(cbd.Delta.Thinking)
+			state.Thinking(blockId, cbd.Delta.Thinking)
 		case "signature_delta":
-			state.ThinkingSignature(cbd.Delta.Signature)
+			state.ThinkingSignature(blockId, cbd.Delta.Signature)
 		case "input_json_delta":
 			if p.lastToolCall.IsServer {
 				p.lastToolCall.Buffer += cbd.Delta.PartialJSON
 			} else {
-				state.ToolCall(p.lastToolCall.ID, p.lastToolCall.ID, "", nil)
+				state.ToolCall(p.lastToolCall.ID, "", "")
 			}
 		}
-		dirty = true
 	case "content_block_stop":
 		var cbst MessagesStreamContentBlockStop
 		if err := json.Unmarshal(data, &cbst); err != nil {
@@ -272,21 +291,27 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 		switch cbst.Type {
 		case "server_tool_use":
 			if p.lastToolCall.IsServer {
-				var output MessagesWebSearchQuery
-				if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
-					return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
+				switch p.lastToolCall.ToolName {
+				case "web_search":
+					var output MessagesWebSearchQuery
+					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
+						return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
+					}
+					state.WebSearchQuery(p.lastToolCall.ID, output.Query)
+				case "web_fetch":
+					var output MessagesWebFetchQuery
+					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
+						return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
+					}
+					state.ViewWebpageUrl(p.lastToolCall.ID, output.URL)
 				}
-				state.WebSearchQuery(p.lastToolCall.ID, output.Query)
 			}
 		}
-		dirty = true
+		state.Complete(p.blockId(state, cbst.Index))
 	case "message_stop":
 		return DoneChunkResult()
 	}
-	if dirty {
-		return UpdateChunkResult()
-	}
-	return EmptyChunkResult()
+	return AcceptedResult()
 }
 
 func (p *MessagesAPI) ParseHttpError(code int, body []byte) *AIError {

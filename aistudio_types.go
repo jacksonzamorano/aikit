@@ -11,11 +11,12 @@ type AIStudioTools struct {
 	FunctionDeclarations []map[string]any `json:"functionDeclarations,omitempty"`
 }
 type AIStudioGenerateContentResponse struct {
-	Candidates []AIStudioCandidate    `json:"candidates"`
-	Usage      AIStudioUsageMetadata  `json:"usageMetadata"`
+	ResponseId string                `json:"responseId"`
+	Candidates []AIStudioCandidate   `json:"candidates"`
+	Usage      AIStudioUsageMetadata `json:"usageMetadata"`
 }
 type AIStudioErrorResponse struct {
-	Error AIStudioErrorResponseError `json:"error,omitempty"`
+	Error AIStudioErrorResponseError `json:"error"`
 }
 type AIStudioErrorResponseError struct {
 	Code    int    `json:"code,omitempty"`
@@ -29,16 +30,17 @@ type AIStudioUsageMetadata struct {
 }
 type AIStudioCandidate struct {
 	Content      AIStudioContent `json:"content"`
-	FinishReason *string       `json:"finishReason,omitempty"`
+	FinishReason *string         `json:"finishReason,omitempty"`
+	Index        int             `json:"index,omitempty"`
 }
 type AIStudioContent struct {
-	Role  string       `json:"role,omitempty"`
+	Role  string         `json:"role,omitempty"`
 	Parts []AIStudioPart `json:"parts,omitempty"`
 }
 type AIStudioPart struct {
-	Thought          bool                  `json:"thought,omitempty"`
-	ThoughtSignature string                `json:"thoughtSignature,omitempty"`
-	Text             string                `json:"text,omitempty"`
+	Thought          bool                    `json:"thought,omitempty"`
+	ThoughtSignature string                  `json:"thoughtSignature,omitempty"`
+	Text             string                  `json:"text,omitempty"`
 	FunctionCall     *AIStudioFunctionCall   `json:"functionCall,omitempty"`
 	FunctionResult   *AIStudioFunctionResult `json:"functionResponse,omitempty"`
 }

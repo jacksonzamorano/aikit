@@ -9,10 +9,10 @@ import (
 
 var openaiTestReasoningEffort = "low"
 
-func TestResponsesOpenAI(t *testing.T) {
+func TestResponsesOpenAITool(t *testing.T) {
 	all := ""
 
-	session := MakeRequest(t, aikit.OpenAIProvider(os.Getenv("OPENAI_KEY")), "gpt-5-nano", &openaiTestReasoningEffort)
+	session := MakeRequest(t, aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")), "gpt-5-nano", &openaiTestReasoningEffort)
 	session.Debug = testDebugEnabled
 	result := session.Stream(func(result *aikit.Thread) {
 		all += SnapshotResult(*result)

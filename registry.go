@@ -13,11 +13,24 @@ func GoogleProvider(key string) Gateway {
 func OpenAIProvider(key string) Gateway {
 	return &ResponsesAPI{
 		Config: ProviderConfig{
-			Name:    "openai",
-			BaseURL: "https://api.openai.com",
-			APIKey:  key,
+			Name:              "openai",
+			BaseURL:           "https://api.openai.com",
+			APIKey:            key,
+			WebSearchToolName: "web_search",
 		},
 		GenerateSummary: false,
+	}
+}
+
+func OpenAIVerifiedProvider(key string) Gateway {
+	return &ResponsesAPI{
+		Config: ProviderConfig{
+			Name:              "openai",
+			BaseURL:           "https://api.openai.com",
+			APIKey:            key,
+			WebSearchToolName: "web_search",
+		},
+		GenerateSummary: true,
 	}
 }
 
@@ -42,11 +55,15 @@ func GroqProvider(key string) Gateway {
 func AnthropicProvider(key string) Gateway {
 	return &MessagesAPI{
 		Config: ProviderConfig{
-			Name:    "anthropic",
-			BaseURL: "https://api.anthropic.com",
-			APIKey:  key,
+			Name:              "anthropic",
+			BaseURL:           "https://api.anthropic.com",
+			APIKey:            key,
+			WebSearchToolName: "web_search_20250305",
+			WebFetchToolName:  "web_fetch_20250910",
 		},
-		BetaFeatures: []string{"interleaved-thinking-2025-05-14"},
+		BetaFeatures: []string{
+			"interleaved-thinking-2025-05-14",
+		},
 	}
 }
 func XAIProvider(key string) Gateway {

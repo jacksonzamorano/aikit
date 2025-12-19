@@ -69,26 +69,27 @@ func (p *AIStudioAPI) Update(block *ThreadBlock) {
 				{
 					FunctionCall: &AIStudioFunctionCall{
 						Name: block.ToolCall.Name,
-						Args: block.ToolCall.Arguments,
+						Args: []byte(block.ToolCall.Arguments),
 					},
 					Text:             block.Text,
 					ThoughtSignature: block.Signature,
 				},
 			},
 		})
-	case InferenceBlockToolResult:
-		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
-			Role: "model",
-			Parts: []AIStudioPart{
-				{
-					FunctionResult: &AIStudioFunctionResult{
-						Id:       block.ToolResult.ToolCallID,
-						Name:     block.ToolCall.Name,
-						Response: block.ToolResult.Output,
+		if block.ToolResult != nil {
+			p.Request.Contents = append(p.Request.Contents, AIStudioContent{
+				Role: "model",
+				Parts: []AIStudioPart{
+					{
+						FunctionResult: &AIStudioFunctionResult{
+							Id:       block.ToolResult.ToolCallID,
+							Name:     block.ToolCall.Name,
+							Response: []byte(block.ToolResult.Output),
+						},
 					},
 				},
-			},
-		})
+			})
+		}
 	}
 }
 
@@ -114,31 +115,29 @@ func (p AIStudioAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 	state.Result.InputTokens += chunk.Usage.InputTokens
 	state.Result.OutputTokens += chunk.Usage.OutputTokens
 	state.Result.CacheReadTokens += chunk.Usage.CachedTokens
+	state.ThreadId = chunk.ResponseId
 
-	if len(chunk.Candidates) == 0 {
-		return EmptyChunkResult()
-	}
 	candidate := chunk.Candidates[0]
 	if candidate.FinishReason != nil {
+		state.Complete(chunk.ResponseId)
 		return DoneChunkResult()
 	}
 	for i := range candidate.Content.Parts {
+		id := chunk.ResponseId
 		part := candidate.Content.Parts[i]
 		if part.Text != "" {
 			if part.Thought {
-				state.ThinkingWithSignature(part.Text, part.ThoughtSignature)
+				state.ThinkingWithSignature(id, part.Text, part.ThoughtSignature)
 			} else {
-				state.Text(part.Text)
+				state.Text(id, part.Text)
 			}
-			return UpdateChunkResult()
 		} else if part.FunctionCall != nil {
 			id := state.NewBlockId(InferenceBlockToolCall)
 			fnCall := part.FunctionCall
-			state.ToolCallWithThinking(id, id, fnCall.Name, fnCall.Args, "", part.ThoughtSignature)
-			return UpdateChunkResult()
+			state.ToolCallWithThinking(id, fnCall.Name, string(fnCall.Args), "", part.ThoughtSignature)
 		}
 	}
-	return EmptyChunkResult()
+	return AcceptedResult()
 }
 
 func (p AIStudioAPI) ParseHttpError(code int, body []byte) *AIError {

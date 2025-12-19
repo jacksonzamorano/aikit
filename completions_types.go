@@ -1,7 +1,5 @@
 package aikit
 
-import "encoding/json"
-
 type CompletionsErrorResponse struct {
 	Error CompletionsErrorDetail `json:"error"`
 }
@@ -53,15 +51,17 @@ type CompletionsToolCall struct {
 	Function *CompletionsToolCallFunction `json:"function,omitempty"`
 }
 type CompletionsToolCallFunction struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 type CompletionsStreamChunk struct {
+	Id      string                    `json:"id"`
 	Choices []CompletionsStreamChoice `json:"choices"`
 	Usage   *CompletionsUsage         `json:"usage,omitempty"`
 }
 
 type CompletionsStreamChoice struct {
+	Index        int                    `json:"index"`
 	Delta        CompletionsStreamDelta `json:"delta"`
 	FinishReason *string                `json:"finish_reason,omitempty"`
 }
@@ -81,6 +81,6 @@ type CompletionsToolCallDelta struct {
 }
 
 type CompletionsToolCallFunctionDelta struct {
-	Name      string          `json:"name,omitempty"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
 }

@@ -9,7 +9,7 @@ import (
 
 var anthropicReasoningEffort = "1024"
 
-func TestAnthropicStream(t *testing.T) {
+func TestAnthropicTool(t *testing.T) {
 	all := ""
 
 	session := MakeRequest(t, aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")), "claude-haiku-4-5-20251001", &anthropicReasoningEffort)

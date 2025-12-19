@@ -15,6 +15,9 @@ type ProviderConfig struct {
 	Endpoint string
 
 	APIKey string
+
+	WebSearchToolName string
+	WebFetchToolName  string
 }
 
 func (c ProviderConfig) resolveEndpoint(defaultPath string) string {

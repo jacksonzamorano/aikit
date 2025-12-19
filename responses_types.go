@@ -49,7 +49,7 @@ type ResponsesOutput struct {
 	Id        string                    `json:"id,omitempty"`
 	Name      string                    `json:"name,omitempty"`
 	CallId    string                    `json:"call_id,omitempty"`
-	Arguments json.RawMessage           `json:"arguments,omitempty"`
+	Arguments string                    `json:"arguments,omitempty"`
 }
 type ResponsesOutputToolCall struct {
 	Id        string         `json:"id,omitempty"`

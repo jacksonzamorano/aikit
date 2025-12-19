@@ -76,13 +76,14 @@ func (p *CompletionsAPI) Update(block *ThreadBlock) {
 				},
 			}},
 		})
-	case InferenceBlockToolResult:
-		p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
-			Role:       "tool",
-			Content:    string(block.ToolResult.Output),
-			Name:       block.ToolCall.Name,
-			ToolCallId: block.ToolCall.ID,
-		})
+		if block.ToolResult != nil {
+			p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
+				Role:       "tool",
+				Content:    string(block.ToolResult.Output),
+				Name:       block.ToolCall.Name,
+				ToolCallId: block.ToolCall.ID,
+			})
+		}
 	}
 }
 
@@ -97,12 +98,12 @@ func (p *CompletionsAPI) MakeRequest(state *Thread) *http.Request {
 }
 
 func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
-	dirty := false
-
 	var chunk CompletionsStreamChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
+
+	state.ThreadId = chunk.Id
 
 	if chunk.Usage != nil {
 		nonCachedInput := max(chunk.Usage.PromptTokens-chunk.Usage.PromptTokenDetails.CachedTokens, 0)
@@ -111,18 +112,13 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 		state.Result.CacheReadTokens += chunk.Usage.PromptTokenDetails.CachedTokens
 	}
 
-	if len(chunk.Choices) == 0 {
-		return EmptyChunkResult()
-	}
-
 	for _, choice := range chunk.Choices {
+		id := fmt.Sprintf("%s-%d", chunk.Id, choice.Index)
 		if choice.Delta.ReasoningContent != "" {
-			state.Thinking(choice.Delta.ReasoningContent)
-			dirty = true
+			state.Thinking(id, choice.Delta.ReasoningContent)
 		}
 		if choice.Delta.Content != "" {
-			state.Text(choice.Delta.Content)
-			dirty = true
+			state.Text(id, choice.Delta.Content)
 		}
 
 		for i := range choice.Delta.ToolCalls {
@@ -134,14 +130,13 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 				p.lastTool = id
 			}
 
-			state.ToolCall(id, id, tc.Function.Name, tc.Function.Arguments)
-			dirty = true
+			state.ToolCall(id, tc.Function.Name, tc.Function.Arguments)
+		}
+		if choice.FinishReason != nil {
+			state.Complete(id)
 		}
 	}
-	if dirty {
-		return UpdateChunkResult()
-	}
-	return EmptyChunkResult()
+	return AcceptedResult()
 }
 
 func (p *CompletionsAPI) ParseHttpError(code int, body []byte) *AIError {

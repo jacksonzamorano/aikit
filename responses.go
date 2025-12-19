@@ -37,8 +37,10 @@ func (p *ResponsesAPI) InitSession(state *Thread) {
 		tools = append(tools, tool)
 	}
 
-	if state.MaxWebSearches > 0 {
-		tools = append(tools, ResponsesTool{Type: "web_search"})
+	if state.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
+		tools = append(tools, ResponsesTool{
+			Type: p.Config.WebSearchToolName,
+		})
 	}
 
 	p.Request = ResponsesRequest{
@@ -72,13 +74,15 @@ func (p *ResponsesAPI) Update(block *ThreadBlock) {
 		})
 	case InferenceBlockSystem:
 		p.Request.Instructions = block.Text
-	case InferenceBlockToolResult:
-		res, _ := json.Marshal(block.ToolResult.Output)
-		p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{
-			ToolCallId: block.ToolCall.ID,
-			Output:     res,
-			Type:       "function_call_output",
-		})
+	case InferenceBlockToolCall:
+		if block.ToolResult != nil {
+			res, _ := json.Marshal(block.ToolResult.Output)
+			p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{
+				ToolCallId: block.ToolCall.ID,
+				Output:     res,
+				Type:       "function_call_output",
+			})
+		}
 	}
 }
 
@@ -101,38 +105,38 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 
 	switch data.Type {
 	case "response.output_text.delta":
-		state.Text(data.Delta)
+		state.Text(data.ItemId, data.Delta)
+	case "response.output_text.done":
+		state.Complete(data.ItemId)
 	case "response.output_item.done":
 		switch data.Item.Type {
 		case "function_call":
-			state.ToolCall(data.Item.Id, data.Item.CallId, data.Item.Name, data.Item.Arguments)
-			return UpdateChunkResult()
+			state.ToolCall(data.Item.CallId, data.Item.Name, data.Item.Arguments)
 		case "web_search_call":
 			switch data.Item.Action.Type {
 			case "search":
 				state.WebSearchQuery(data.Item.Id, data.Item.Action.Query)
 				state.CompleteWebSearch(data.Item.Id)
 			case "open_page":
-				state.LoadWebpage(data.Item.Id, data.Item.Action.Url)
+				state.ViewWebpageUrl(data.Item.Id, data.Item.Action.Url)
 			}
 		case "reasoning":
 			for s := range data.Summary {
-				state.Thinking(data.Summary[s].Text)
+				state.Thinking(data.ItemId, data.Summary[s].Text)
 			}
-			return UpdateChunkResult()
-		default:
-			return EmptyChunkResult()
 		}
 	case "response.output_text.annotation.added":
-		state.Cite(data.Annotation.Url)
+		state.Cite(data.ItemId, data.Annotation.Url)
 	case "response.reasoning_summary_text.delta":
-		state.Thinking(data.Text)
+		state.Thinking(data.ItemId, data.Delta)
+	case "response.reasoning_summary_text.done":
+		state.Complete(data.ItemId)
 	case "response.completed":
 		usage := data.Response.Usage
 		state.Result.CacheReadTokens += usage.InputDetails.CachedTokens
 		state.Result.InputTokens += (usage.InputTokens + usage.PromptTokens - usage.InputDetails.CachedTokens)
 		state.Result.OutputTokens += data.Response.Usage.OutputTokens + data.Response.Usage.PromptTokens
-		state.ResponseID = data.Response.Id
+		state.ThreadId = data.Response.Id
 		p.Request.PreviousResponseID = data.Response.Id
 		return DoneChunkResult()
 	case "error", "response.failed":
@@ -145,7 +149,7 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 		}
 		return ErrorChunkResult(UnknownError("responses", msg))
 	}
-	return EmptyChunkResult()
+	return AcceptedResult()
 }
 
 func (p *ResponsesAPI) ParseHttpError(code int, body []byte) *AIError {

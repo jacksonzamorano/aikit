@@ -15,34 +15,25 @@ const (
 )
 
 type ChunkResult struct {
-	Done    bool
-	Updated bool
-	Error   error
+	Done  bool
+	Error error
 }
 
-func EmptyChunkResult() ChunkResult {
+func AcceptedResult() ChunkResult {
 	return ChunkResult{
-		Updated: false,
-		Error:   nil,
+		Error: nil,
+		Done:  false,
 	}
 }
 func DoneChunkResult() ChunkResult {
 	return ChunkResult{
-		Done:    true,
-		Updated: false,
-		Error:   nil,
+		Done:  true,
+		Error: nil,
 	}
 }
 func ErrorChunkResult(err *AIError) ChunkResult {
 	return ChunkResult{
-		Updated: false,
-		Error:   err,
-	}
-}
-func UpdateChunkResult() ChunkResult {
-	return ChunkResult{
-		Updated: true,
-		Error:   nil,
+		Error: err,
 	}
 }
 
@@ -77,7 +68,7 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 					}
 					return s.State
 				}
-				s.State.ToolResult(block.ToolCall, resBytes)
+				s.State.ToolResult(block.ToolCall, string(resBytes))
 			}
 			s.Provider.Update(s.State.Blocks[lastBlock])
 			lastBlock++
@@ -125,7 +116,7 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 					log.Printf("[Session] SSE Event: %s", string(ev.data))
 				}
 				result := s.Provider.OnChunk(ev.data, s.State)
-				if result.Updated {
+				if s.State.Updated {
 					onPartial(s.State)
 				}
 				if result.Error != nil {
