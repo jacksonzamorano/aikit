@@ -168,9 +168,11 @@ func (p *MessagesAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
 		var e MessagesStreamErrorEvent
 		if err := json.Unmarshal(data, &e); err == nil && e.Error != nil && e.Error.Message != "" {
 			switch e.Error.Type {
-			case "authentication_error":
+			case "authentication_error", "permission_error":
 				return ErrorChunkResult(AuthenticationError(p.Name(), e.Error.Message))
-			case "rate_limit_exceeded":
+			case "not_found_error", "request_too_large":
+				return ErrorChunkResult(ConfigurationError(p.Name(), e.Error.Message))
+			case "rate_limit_exceeded", "rate_limit_error":
 				return ErrorChunkResult(RateLimitError(p.Name(), e.Error.Message))
 			}
 		} else {
