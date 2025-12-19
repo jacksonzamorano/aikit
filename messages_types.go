@@ -101,20 +101,24 @@ type MessagesStreamMessageDelta struct {
 }
 
 type MessagesStreamContentBlock struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
-	Thinking  string          `json:"thinking,omitempty"`
-	Signature string          `json:"signature,omitempty"`
-	Data      string          `json:"data,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	ID        string          `json:"id,omitempty"`
-	Input     json.RawMessage `json:"input,omitempty"`
+	Type      string                           `json:"type"`
+	Text      string                           `json:"text,omitempty"`
+	Thinking  string                           `json:"thinking,omitempty"`
+	Signature string                           `json:"signature,omitempty"`
+	Data      string                           `json:"data,omitempty"`
+	Name      string                           `json:"name,omitempty"`
+	ID        string                           `json:"id,omitempty"`
+	ToolUseId string                           `json:"tool_use_id,omitempty"`
+	Input     json.RawMessage                  `json:"input,omitempty"`
+	Content   []MessagesStreamContentDeltaData `json:"content,omitempty"`
 }
 
 type MessagesStreamContentBlockStart struct {
 	Type         string                     `json:"type"`
 	Index        int                        `json:"index"`
 	ContentBlock MessagesStreamContentBlock `json:"content_block"`
+	Id           string                     `json:"id"`
+	Name         string                     `json:"name"`
 }
 
 type MessagesStreamContentDelta struct {
@@ -128,6 +132,8 @@ type MessagesStreamContentDeltaData struct {
 	Signature   string `json:"signature,omitempty"`
 	Data        string `json:"data,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
+	Title       string `json:"title,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 type MessagesStreamContentBlockDelta struct {
@@ -151,4 +157,8 @@ type MessagesBuilderBlock struct {
 	ToolId    string `json:"id,omitempty"`
 	ToolName  string `json:"name,omitempty"`
 	ToolInput string `json:"input,omitempty"`
+}
+
+type MessagesWebSearchQuery struct {
+	Query string `json:"query"`
 }

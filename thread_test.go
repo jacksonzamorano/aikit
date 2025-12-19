@@ -12,12 +12,15 @@ import (
 	"github.com/jacksonzamorano/aikit"
 )
 
+var testDebugEnabled = true
+
 type toolResponse struct {
 	Time  string `json:"time"`
 	Error string `json:"error,omitempty"`
 }
 
-func MakeRequest(provider aikit.Gateway, modelname string, reasoning *string) aikit.Session {
+func MakeRequest(t *testing.T, provider aikit.Gateway, modelname string, reasoning *string) aikit.Session {
+	t.Helper()
 	state := aikit.NewProviderState()
 	state.Model = modelname
 	state.System("You are a helpful assistant. You will always request the current time using the get_time tool and use it in your response.")
@@ -45,6 +48,25 @@ func MakeRequest(provider aikit.Gateway, modelname string, reasoning *string) ai
 				Error: fmt.Sprintf("Unknown tool: %s", name),
 			}
 		}
+	}
+
+	session := aikit.Session{
+		Provider: provider,
+		State:    state,
+	}
+
+	return session
+}
+
+func MakeSearchRequest(t *testing.T, provider aikit.Gateway, modelname string, reasoning *string) aikit.Session {
+	t.Helper()
+	state := aikit.NewProviderState()
+	state.Model = modelname
+	state.MaxWebSearches = 1
+	state.System("You are a helpful assistant. Always check for the most up-to-date information.")
+	state.Input("What's new in the newest version of React? Keep your answer concise.")
+	if reasoning != nil {
+		state.ReasoningEffort = *reasoning
 	}
 
 	session := aikit.Session{

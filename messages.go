@@ -8,14 +8,21 @@ import (
 	"strconv"
 )
 
+type messagesLastToolCall struct {
+	ID       string
+	IsServer bool
+	Buffer   string
+}
+
 // MessagesAPI implements the Messages API shape (Anthropic-style).
 // Configurable BaseURL/Endpoint allows pointing at compatible endpoints.
 type MessagesAPI struct {
-	Config  ProviderConfig
-	Request MessagesRequest
-	Version string
+	Config       ProviderConfig
+	Request      MessagesRequest
+	Version      string
+	BetaFeatures []string
 
-	lastToolCallID string
+	lastToolCall messagesLastToolCall
 }
 
 func (p *MessagesAPI) Name() string {
@@ -38,13 +45,13 @@ func (p *MessagesAPI) InitSession(state *Thread) {
 		tools = append(tools, toolSpec)
 	}
 
-	// if request.MaxWebSearches > 0 {
-	// 	tools = append(tools, map[string]any{
-	// 		"type":     "web_search_20250305",
-	// 		"name":     "web_search",
-	// 		"max_uses": request.MaxWebSearches,
-	// 	})
-	// }
+	if state.MaxWebSearches > 0 {
+		tools = append(tools, map[string]any{
+			"type":     "web_search_20250305",
+			"name":     "web_search",
+			"max_uses": state.MaxWebSearches,
+		})
+	}
 
 	p.Request = MessagesRequest{
 		Messages:  []MessagesMessage{},
@@ -150,6 +157,9 @@ func (p *MessagesAPI) MakeRequest(state *Thread) *http.Request {
 	}
 	providerReq.Header.Add("anthropic-version", p.Version)
 	providerReq.Header.Add("x-api-key", p.Config.APIKey)
+	if len(p.BetaFeatures) > 0 {
+		providerReq.Header.Add("x-beta-features", fmt.Sprintf("%s", p.BetaFeatures))
+	}
 	return providerReq
 }
 
@@ -208,12 +218,27 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 		}
 		switch cbs.ContentBlock.Type {
 		case "thinking":
-			state.Thinking(cbs.ContentBlock.Thinking, cbs.ContentBlock.Signature)
+			state.Thinking(cbs.ContentBlock.Thinking)
+			state.ThinkingSignature(cbs.ContentBlock.Signature)
 		case "redacted_thinking":
 			state.EncryptedThinking(cbs.ContentBlock.Data)
 		case "tool_use":
 			state.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.ID, cbs.ContentBlock.Name, cbs.ContentBlock.Input)
-			p.lastToolCallID = cbs.ContentBlock.ID
+			p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: false}
+		case "server_tool_use":
+			switch cbs.ContentBlock.Name {
+			case "web_search":
+				state.WebSearch(cbs.ContentBlock.ID)
+				p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: true}
+			}
+		case "web_search_tool_result":
+			for _, search := range cbs.ContentBlock.Content {
+				state.WebSearchResult(cbs.ContentBlock.ToolUseId, ThreadWebSearchResult{
+					Title: search.Title,
+					URL:   search.URL,
+				})
+			}
+			state.CompleteWebSearch(cbs.ContentBlock.ToolUseId)
 		case "text":
 			state.Text(cbs.ContentBlock.Text)
 		}
@@ -228,17 +253,31 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 		case "text_delta":
 			state.Text(cbd.Delta.Text)
 		case "thinking_delta":
-			state.Thinking(cbd.Delta.Thinking, "")
+			state.Thinking(cbd.Delta.Thinking)
 		case "signature_delta":
-			state.Thinking("", cbd.Delta.Signature)
+			state.ThinkingSignature(cbd.Delta.Signature)
 		case "input_json_delta":
-			state.ToolCall(p.lastToolCallID, p.lastToolCallID, "", nil)
+			if p.lastToolCall.IsServer {
+				p.lastToolCall.Buffer += cbd.Delta.PartialJSON
+			} else {
+				state.ToolCall(p.lastToolCall.ID, p.lastToolCall.ID, "", nil)
+			}
 		}
 		dirty = true
 	case "content_block_stop":
 		var cbst MessagesStreamContentBlockStop
 		if err := json.Unmarshal(data, &cbst); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
+		}
+		switch cbst.Type {
+		case "server_tool_use":
+			if p.lastToolCall.IsServer {
+				var output MessagesWebSearchQuery
+				if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
+					return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
+				}
+				state.WebSearchQuery(p.lastToolCall.ID, output.Query)
+			}
 		}
 		dirty = true
 	case "message_stop":

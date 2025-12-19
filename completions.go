@@ -117,7 +117,7 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 
 	for _, choice := range chunk.Choices {
 		if choice.Delta.ReasoningContent != "" {
-			state.Thinking(choice.Delta.ReasoningContent, "")
+			state.Thinking(choice.Delta.ReasoningContent)
 			dirty = true
 		}
 		if choice.Delta.Content != "" {

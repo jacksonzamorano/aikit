@@ -9,6 +9,7 @@ type Thread struct {
 	WebSearchEnabled   bool                                        `json:"web_search"`
 	ReasoningEffort    string                                      `json:"reasoning_effort"`
 	Tools              map[string]ToolDefinition                   `json:"tools"`
+	MaxWebSearches     int                                         `json:"max_web_searches"`
 	HandleToolFunction func(name string, args json.RawMessage) any `json:"-"`
 
 	Success bool        `json:"success"`
@@ -99,12 +100,26 @@ func (s *Thread) Cite(id string, citation string) {
 	}
 	b.Citations = append(b.Citations, citation)
 }
-func (s *Thread) Thinking(text string, signature string) {
+func (s *Thread) Thinking(text string) {
 	b := s.latestBlock(InferenceBlockThinking)
 	if b == nil {
 		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
 	}
 	b.Text += text
+}
+func (s *Thread) ThinkingWithSignature(thinking string, signature string) {
+	b := s.latestBlock(InferenceBlockThinking)
+	if b == nil {
+		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
+	}
+	b.Text += thinking
+	b.Signature += signature
+}
+func (s *Thread) ThinkingSignature(signature string) {
+	b := s.latestBlock(InferenceBlockThinking)
+	if b == nil {
+		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
+	}
 	b.Signature += signature
 }
 func (s *Thread) EncryptedThinking(text string) {
@@ -163,4 +178,32 @@ func (s *Thread) ToolResult(toolCall *ThreadToolCall, output json.RawMessage) {
 		Output:     output,
 	}
 	b.ToolCall = toolCall
+}
+func (s *Thread) webSearchBlock(id string) *ThreadBlock {
+	blockIdx := len(s.Blocks) - 1
+	for blockIdx > 0 {
+		if s.Blocks[blockIdx].Type == InferenceBlockWebSearch && !s.Blocks[blockIdx].Complete {
+			return s.Blocks[blockIdx]
+		}
+		blockIdx--
+	}
+	return s.create(id, InferenceBlockWebSearch)
+}
+func (s *Thread) WebSearch(id string) {
+	b := s.webSearchBlock(id)
+	b.WebSearch = &ThreadWebSearch{
+		Results: []ThreadWebSearchResult{},
+	}
+}
+func (s *Thread) WebSearchQuery(id string, query string) {
+	b := s.webSearchBlock(id)
+	b.WebSearch.Query = query
+}
+func (s *Thread) WebSearchResult(id string, result ThreadWebSearchResult) {
+	b := s.webSearchBlock(id)
+	b.WebSearch.Results = append(b.WebSearch.Results, result)
+}
+func (s *Thread) CompleteWebSearch(id string) {
+	b := s.webSearchBlock(id)
+	b.Complete = true
 }

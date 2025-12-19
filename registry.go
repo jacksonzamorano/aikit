@@ -46,6 +46,7 @@ func AnthropicProvider(key string) Gateway {
 			BaseURL: "https://api.anthropic.com",
 			APIKey:  key,
 		},
+		BetaFeatures: []string{"interleaved-thinking-2025-05-14"},
 	}
 }
 func XAIProvider(key string) Gateway {

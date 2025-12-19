@@ -13,7 +13,7 @@ type AIStudioAPI struct {
 }
 
 func (p *AIStudioAPI) Name() string {
-	return "google." + p.Config.Name
+	return "aistudio." + p.Config.Name
 }
 func (p *AIStudioAPI) Transport() GatewayTransport {
 	return TransportSSE
@@ -126,7 +126,7 @@ func (p AIStudioAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 		part := candidate.Content.Parts[i]
 		if part.Text != "" {
 			if part.Thought {
-				state.Thinking(part.Text, part.ThoughtSignature)
+				state.ThinkingWithSignature(part.Text, part.ThoughtSignature)
 			} else {
 				state.Text(part.Text)
 			}

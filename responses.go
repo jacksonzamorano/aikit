@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 )
 
@@ -106,15 +105,14 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 			return UpdateChunkResult()
 		case "reasoning":
 			for s := range data.Summary {
-				state.Thinking(data.Summary[s].Text, "")
+				state.Thinking(data.Summary[s].Text)
 			}
 			return UpdateChunkResult()
 		default:
-			log.Printf("[Responses] Unhandled content part done: %s", data.Item.Type)
 			return EmptyChunkResult()
 		}
 	case "response.reasoning_summary_text.delta":
-		state.Thinking(data.Text, "")
+		state.Thinking(data.Text)
 	case "response.completed":
 		usage := data.Response.Usage
 		state.Result.CacheReadTokens += usage.InputDetails.CachedTokens
