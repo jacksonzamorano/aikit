@@ -7,7 +7,7 @@ import (
 	"github.com/jacksonzamorano/aikit"
 )
 
-var openaiTestReasoningEffort = "high"
+var openaiTestReasoningEffort = "low"
 
 func TestResponsesOpenAI(t *testing.T) {
 	all := ""
