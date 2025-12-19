@@ -32,6 +32,8 @@ type ThreadUsage struct {
 	CacheWriteTokens int64 `json:"cache_write_tokens"`
 	InputTokens      int64 `json:"input_tokens"`
 	OutputTokens     int64 `json:"output_tokens"`
+	WebSearches      int   `json:"web_searches"`
+	PageViews        int   `json:"page_views"`
 }
 
 func (state *Thread) Debug() string {
@@ -260,6 +262,7 @@ func (s *Thread) WebSearchResult(id string, result ThreadWebSearchResult) {
 func (s *Thread) CompleteWebSearch(id string) {
 	b := s.findOrCreateIDBlock(id, InferenceBlockWebSearch)
 	b.Complete = true
+	s.Result.WebSearches++
 	s.Updated = true
 }
 func (s *Thread) ViewWebpage(id string) {
@@ -270,5 +273,6 @@ func (s *Thread) ViewWebpageUrl(id string, url string) {
 	b := s.findOrCreateIDBlock(id, InferenceBlockViewWebpage)
 	b.Text = url
 	b.Complete = true
+	s.Result.PageViews++
 	s.Updated = true
 }

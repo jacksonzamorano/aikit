@@ -108,4 +108,18 @@ func VerifyResults(t *testing.T, name string, results string, result aikit.Threa
 	if result.Result.InputTokens == 0 {
 		t.Fatalf("Recieved no input tokens.")
 	}
+	for _, b := range result.Blocks {
+		if !b.Complete {
+			t.Errorf("Block %s of type %s not marked complete.", b.ID, b.Type)
+		}
+		if b.ID == "" && b.Type != aikit.InferenceBlockInput && b.Type != aikit.InferenceBlockSystem {
+			t.Errorf("Block of type %s has no ID.", b.Type)
+		}
+		if b.AliasFor != nil && b.AliasId == "" {
+			t.Errorf("Block %s is an alias but has no AliasId.", b.ID)
+		}
+		if b.AliasId != "" && b.AliasFor == nil {
+			t.Errorf("Block %s has an AliasId but is not an alias.", b.ID)
+		}
+	}
 }

@@ -25,7 +25,7 @@ func TestResponsesOpenAITool(t *testing.T) {
 func TestResponsesOpenAIWeb(t *testing.T) {
 	all := ""
 
-	session := MakeSearchRequest(t, aikit.OpenAIProvider(os.Getenv("OPENAI_KEY")), "gpt-5-nano", &openaiTestReasoningEffort)
+	session := MakeSearchRequest(t, aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")), "gpt-5-nano", &openaiTestReasoningEffort)
 	session.Debug = testDebugEnabled
 	result := session.Stream(func(result *aikit.Thread) {
 		all += SnapshotResult(*result)
