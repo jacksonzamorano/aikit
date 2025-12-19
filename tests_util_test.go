@@ -63,13 +63,13 @@ func SnapshotResult(results aikit.ProviderState) string {
 	return string(bytes) + ","
 }
 
-func VerifyResults(t *testing.T, results string, result aikit.ProviderState) {
+func VerifyResults(t *testing.T, name string, results string, result aikit.ProviderState) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
 	testPath := path.Join(cwd, "tests")
-	testRunPath := path.Join(testPath, fmt.Sprintf("test_run_%d.json", time.Now().UnixNano()))
+	testRunPath := path.Join(testPath, fmt.Sprintf("run_%s_%d.json", name, time.Now().UnixNano()))
 	os.MkdirAll(testPath, 0755)
 	results_cleaned := fmt.Sprintf("[%s]", strings.TrimRight(results, ","))
 	os.WriteFile(testRunPath, []byte(results_cleaned), 0644)

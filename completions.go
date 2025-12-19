@@ -137,10 +137,6 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *ProviderState) ChunkResult 
 			state.ToolCall(id, id, tc.Function.Name, tc.Function.Arguments)
 			dirty = true
 		}
-
-		if choice.FinishReason != nil {
-			return DoneChunkResult()
-		}
 	}
 	if dirty {
 		return UpdateChunkResult()
