@@ -6,7 +6,6 @@ import (
 )
 
 type Thread struct {
-	WebSearchEnabled   bool                                        `json:"web_search"`
 	ReasoningEffort    string                                      `json:"reasoning_effort"`
 	Tools              map[string]ToolDefinition                   `json:"tools"`
 	MaxWebSearches     int                                         `json:"max_web_searches"`
@@ -93,7 +92,7 @@ func (s *Thread) Text(text string) {
 	}
 	b.Text += text
 }
-func (s *Thread) Cite(id string, citation string) {
+func (s *Thread) Cite(citation string) {
 	b := s.latestBlock(InferenceBlockText)
 	if b == nil {
 		b = s.create(s.NewBlockId(InferenceBlockText), InferenceBlockText)
@@ -182,7 +181,7 @@ func (s *Thread) ToolResult(toolCall *ThreadToolCall, output json.RawMessage) {
 func (s *Thread) webSearchBlock(id string) *ThreadBlock {
 	blockIdx := len(s.Blocks) - 1
 	for blockIdx > 0 {
-		if s.Blocks[blockIdx].Type == InferenceBlockWebSearch && !s.Blocks[blockIdx].Complete {
+		if s.Blocks[blockIdx].Type == InferenceBlockWebSearch && s.Blocks[blockIdx].ID == id {
 			return s.Blocks[blockIdx]
 		}
 		blockIdx--
@@ -197,7 +196,9 @@ func (s *Thread) WebSearch(id string) {
 }
 func (s *Thread) WebSearchQuery(id string, query string) {
 	b := s.webSearchBlock(id)
-	b.WebSearch.Query = query
+	b.WebSearch = &ThreadWebSearch{
+		Query: query,
+	}
 }
 func (s *Thread) WebSearchResult(id string, result ThreadWebSearchResult) {
 	b := s.webSearchBlock(id)
@@ -205,5 +206,10 @@ func (s *Thread) WebSearchResult(id string, result ThreadWebSearchResult) {
 }
 func (s *Thread) CompleteWebSearch(id string) {
 	b := s.webSearchBlock(id)
+	b.Complete = true
+}
+func (s *Thread) LoadWebpage(id string, url string) {
+	b := s.create(id, InferenceBlockViewWebpage)
+	b.Text = url
 	b.Complete = true
 }

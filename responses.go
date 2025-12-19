@@ -37,6 +37,10 @@ func (p *ResponsesAPI) InitSession(state *Thread) {
 		tools = append(tools, tool)
 	}
 
+	if state.MaxWebSearches > 0 {
+		tools = append(tools, ResponsesTool{Type: "web_search"})
+	}
+
 	p.Request = ResponsesRequest{
 		Inputs: []ResponsesInput{},
 		Tools:  tools,
@@ -103,6 +107,14 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 		case "function_call":
 			state.ToolCall(data.Item.Id, data.Item.CallId, data.Item.Name, data.Item.Arguments)
 			return UpdateChunkResult()
+		case "web_search_call":
+			switch data.Item.Action.Type {
+			case "search":
+				state.WebSearchQuery(data.Item.Id, data.Item.Action.Query)
+				state.CompleteWebSearch(data.Item.Id)
+			case "open_page":
+				state.LoadWebpage(data.Item.Id, data.Item.Action.Url)
+			}
 		case "reasoning":
 			for s := range data.Summary {
 				state.Thinking(data.Summary[s].Text)
@@ -111,6 +123,8 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 		default:
 			return EmptyChunkResult()
 		}
+	case "response.output_text.annotation.added":
+		state.Cite(data.Annotation.Url)
 	case "response.reasoning_summary_text.delta":
 		state.Thinking(data.Text)
 	case "response.completed":

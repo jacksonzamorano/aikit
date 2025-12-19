@@ -13,6 +13,7 @@ const (
 	InferenceBlockToolCall          ThreadBlockType = "tool_call"
 	InferenceBlockToolResult        ThreadBlockType = "tool_result"
 	InferenceBlockWebSearch         ThreadBlockType = "web_search"
+	InferenceBlockViewWebpage       ThreadBlockType = "view_webpage"
 )
 
 type ThreadToolCall struct {

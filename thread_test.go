@@ -12,7 +12,7 @@ import (
 	"github.com/jacksonzamorano/aikit"
 )
 
-var testDebugEnabled = true
+var testDebugEnabled = false
 
 type toolResponse struct {
 	Time  string `json:"time"`

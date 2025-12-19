@@ -20,7 +20,7 @@ type ResponsesReasoning struct {
 }
 type ResponsesTool struct {
 	Type        string          `json:"type,omitempty"`
-	Name        string          `json:"name"`
+	Name        string          `json:"name,omitempty"`
 	Parameters  *ToolJsonSchema `json:"parameters,omitempty"`
 	Description string          `json:"description,omitempty"`
 }
@@ -42,17 +42,14 @@ type ResponsesInputUsage struct {
 	CachedTokens int64 `json:"cached_tokens"`
 }
 type ResponsesOutput struct {
-	Action    *ResponsesOutputAction `json:"action,omitempty"`
-	Role      string                 `json:"role,omitempty"`
-	Content   []ResponsesContent     `json:"content,omitempty"`
-	Type      string                 `json:"type,omitempty"`
-	Id        string                 `json:"id,omitempty"`
-	Name      string                 `json:"name,omitempty"`
-	CallId    string                 `json:"call_id,omitempty"`
-	Arguments json.RawMessage        `json:"arguments,omitempty"`
-}
-type ResponsesOutputAction struct {
-	Type string `json:"type,omitempty"`
+	Action    *ResponsesWebSearchAction `json:"action,omitempty"`
+	Role      string                    `json:"role,omitempty"`
+	Content   []ResponsesContent        `json:"content,omitempty"`
+	Type      string                    `json:"type,omitempty"`
+	Id        string                    `json:"id,omitempty"`
+	Name      string                    `json:"name,omitempty"`
+	CallId    string                    `json:"call_id,omitempty"`
+	Arguments json.RawMessage           `json:"arguments,omitempty"`
 }
 type ResponsesOutputToolCall struct {
 	Id        string         `json:"id,omitempty"`
@@ -99,13 +96,14 @@ type ResponsesStreamError struct {
 type ResponsesStreamEvent struct {
 	Type string `json:"type"`
 
-	Delta   string             `json:"delta,omitempty"`
-	CallID  string             `json:"call_id,omitempty"`
-	Item    *ResponsesOutput   `json:"item,omitempty"`
-	ItemId  string             `json:"item_id,omitempty"`
-	Summary []ResponsesSummary `json:"summary,omitempty"`
-	Part    ResponsesPartEvent `json:"part"`
-	Text    string             `json:"text,omitempty"`
+	Annotation ResponsesContentAnnotation `json:"annotation"`
+	Delta      string                     `json:"delta,omitempty"`
+	CallID     string                     `json:"call_id,omitempty"`
+	Item       *ResponsesOutput           `json:"item,omitempty"`
+	ItemId     string                     `json:"item_id,omitempty"`
+	Summary    []ResponsesSummary         `json:"summary,omitempty"`
+	Part       ResponsesPartEvent         `json:"part"`
+	Text       string                     `json:"text,omitempty"`
 
 	ResponseID string           `json:"response_id,omitempty"`
 	ID         string           `json:"id,omitempty"`
@@ -114,6 +112,12 @@ type ResponsesStreamEvent struct {
 	Error *ResponsesStreamError `json:"error,omitempty"`
 
 	Raw json.RawMessage `json:"-"`
+}
+
+type ResponsesWebSearchAction struct {
+	Type  string `json:"type"`
+	Query string `json:"query"`
+	Url   string `json:"url"`
 }
 
 type ResponsesPartEvent struct {
