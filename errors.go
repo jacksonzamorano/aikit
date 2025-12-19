@@ -10,6 +10,7 @@ type AIErrorCategory string
 const (
 	AIErrorCategoryRateLimit       AIErrorCategory = "rate_limit"
 	AIErrorCategoryAuthentication  AIErrorCategory = "authentication"
+	AIErrorCategoryConfiguration   AIErrorCategory = "configuration"
 	AIErrorCategoryStreamingError  AIErrorCategory = "streaming"
 	AIErrorCategoryDecodingError   AIErrorCategory = "decoding"
 	AIErrorCategoryToolResultError AIErrorCategory = "tool_result_encode"
@@ -58,6 +59,14 @@ func RateLimitError(provider, message string) *AIError {
 func UnknownError(provider, message string) *AIError {
 	return &AIError{
 		Category: AIErrorCategoryUnknown,
+		Provider: provider,
+		Message:  cleanupMessage(message),
+	}
+}
+
+func ConfigurationError(provider, message string) *AIError {
+	return &AIError{
+		Category: AIErrorCategoryConfiguration,
 		Provider: provider,
 		Message:  cleanupMessage(message),
 	}

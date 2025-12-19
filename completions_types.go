@@ -2,6 +2,14 @@ package aikit
 
 import "encoding/json"
 
+type CompletionsErrorResponse struct {
+	Error CompletionsErrorDetail `json:"error"`
+}
+type CompletionsErrorDetail struct {
+	Message string `json:"message"`
+	Type    string `json:"type,omitempty"`
+	Code    string `json:"code,omitempty"`
+}
 type CompletionsRequest struct {
 	Model           string               `json:"model"`
 	Messages        []CompletionsMessage `json:"messages"`
