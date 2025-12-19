@@ -1,7 +1,7 @@
 package aikit
 
-func GoogleProvider(key string) InferenceProvider {
-	return &GoogleAPI{
+func GoogleProvider(key string) Gateway {
+	return &AIStudioAPI{
 		Config: ProviderConfig{
 			Name:    "google",
 			BaseURL: "https://generativelanguage.googleapis.com",
@@ -10,7 +10,7 @@ func GoogleProvider(key string) InferenceProvider {
 	}
 }
 
-func OpenAIProvider(key string) InferenceProvider {
+func OpenAIProvider(key string) Gateway {
 	return &ResponsesAPI{
 		Config: ProviderConfig{
 			Name:    "openai",
@@ -21,7 +21,7 @@ func OpenAIProvider(key string) InferenceProvider {
 	}
 }
 
-func FireworksProvider(key string) InferenceProvider {
+func FireworksProvider(key string) Gateway {
 	return &CompletionsAPI{
 		Config: ProviderConfig{
 			Name:    "fireworks",
@@ -30,7 +30,7 @@ func FireworksProvider(key string) InferenceProvider {
 		},
 	}
 }
-func GroqProvider(key string) InferenceProvider {
+func GroqProvider(key string) Gateway {
 	return &CompletionsAPI{
 		Config: ProviderConfig{
 			Name:    "groq",
@@ -39,7 +39,7 @@ func GroqProvider(key string) InferenceProvider {
 		},
 	}
 }
-func AnthropicProvider(key string) InferenceProvider {
+func AnthropicProvider(key string) Gateway {
 	return &MessagesAPI{
 		Config: ProviderConfig{
 			Name:    "anthropic",
@@ -48,7 +48,7 @@ func AnthropicProvider(key string) InferenceProvider {
 		},
 	}
 }
-func XAIProvider(key string) InferenceProvider {
+func XAIProvider(key string) Gateway {
 	return &CompletionsAPI{
 		Config: ProviderConfig{
 			Name:    "xai",

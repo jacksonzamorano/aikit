@@ -17,7 +17,7 @@ type toolResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func MakeRequest(provider aikit.InferenceProvider, modelname string, reasoning *string) aikit.Session {
+func MakeRequest(provider aikit.Gateway, modelname string, reasoning *string) aikit.Session {
 	state := aikit.NewProviderState()
 	state.Model = modelname
 	state.System("You are a helpful assistant. You will always request the current time using the get_time tool and use it in your response.")
@@ -55,7 +55,7 @@ func MakeRequest(provider aikit.InferenceProvider, modelname string, reasoning *
 	return session
 }
 
-func SnapshotResult(results aikit.ProviderState) string {
+func SnapshotResult(results aikit.Thread) string {
 	bytes, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
 		panic(err)
@@ -63,7 +63,7 @@ func SnapshotResult(results aikit.ProviderState) string {
 	return string(bytes) + ","
 }
 
-func VerifyResults(t *testing.T, name string, results string, result aikit.ProviderState) {
+func VerifyResults(t *testing.T, name string, results string, result aikit.Thread) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		panic(err)

@@ -22,13 +22,13 @@ func (p *MessagesAPI) Name() string {
 	return fmt.Sprintf("messages.%s", p.Config.Name)
 }
 
-func (p *MessagesAPI) Transport() InferenceTransport {
+func (p *MessagesAPI) Transport() GatewayTransport {
 	return TransportSSE
 }
 
 func (p *MessagesAPI) PrepareForUpdates() {}
 
-func (p *MessagesAPI) InitSession(state *ProviderState) {
+func (p *MessagesAPI) InitSession(state *Thread) {
 	tools := make([]map[string]any, 0)
 	for name := range state.Tools {
 		toolSpec := map[string]any{}
@@ -65,7 +65,7 @@ func (p *MessagesAPI) InitSession(state *ProviderState) {
 	}
 }
 
-func (p *MessagesAPI) Update(block *InferenceBlock) {
+func (p *MessagesAPI) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
 		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
@@ -139,7 +139,7 @@ func (p *MessagesAPI) Update(block *InferenceBlock) {
 	}
 }
 
-func (p *MessagesAPI) MakeRequest(state *ProviderState) *http.Request {
+func (p *MessagesAPI) MakeRequest(state *Thread) *http.Request {
 	endpoint := p.Config.resolveEndpoint("/v1/messages")
 	body, _ := json.Marshal(p.Request)
 	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
@@ -153,7 +153,7 @@ func (p *MessagesAPI) MakeRequest(state *ProviderState) *http.Request {
 	return providerReq
 }
 
-func (p *MessagesAPI) OnChunk(data []byte, state *ProviderState) ChunkResult {
+func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 	dirty := false
 
 	var env MessagesStreamEnvelope

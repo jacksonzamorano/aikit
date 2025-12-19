@@ -8,10 +8,10 @@ import (
 	"net/http"
 )
 
-type InferenceTransport string
+type GatewayTransport string
 
 const (
-	TransportSSE InferenceTransport = "sse"
+	TransportSSE GatewayTransport = "sse"
 )
 
 type ChunkResult struct {
@@ -47,12 +47,12 @@ func UpdateChunkResult() ChunkResult {
 }
 
 type Session struct {
-	Provider InferenceProvider
-	State    *ProviderState
+	Provider Gateway
+	State    *Thread
 	Debug    bool
 }
 
-func (s *Session) Stream(onPartial func(*ProviderState)) *ProviderState {
+func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 	// Perform one-off initialization
 	s.Provider.InitSession(s.State)
 
