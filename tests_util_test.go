@@ -13,13 +13,16 @@ import (
 )
 
 type toolResponse struct {
-	Time string `json:"time"`
+	Time  string `json:"time"`
+	Error string `json:"error,omitempty"`
 }
 
-func MakeRequest(provider aikit.InferenceProvider, modelname string, reasoning *string) (aikit.Session, aikit.InferenceRequest) {
-	sys_prompt := "You are a helpful assistant. You will always request the current time using the get_time tool and embed it in your response."
-	prompt := "What is the current time?"
-	tools := map[string]aikit.ToolDefinition{
+func MakeRequest(provider aikit.InferenceProvider, modelname string, reasoning *string) aikit.Session {
+	state := aikit.NewProviderState()
+	state.Model = modelname
+	state.System("You are a helpful assistant. You will always request the current time using the get_time tool and use it in your response.")
+	state.Input("What date is exactly 365 days from today, and what day of the week will it be?")
+	state.Tools = map[string]aikit.ToolDefinition{
 		"get_time": {
 			Description: "Get the current time in ISO 8601 format.",
 			Parameters: &aikit.ToolJsonSchema{
@@ -28,22 +31,28 @@ func MakeRequest(provider aikit.InferenceProvider, modelname string, reasoning *
 			},
 		},
 	}
+	if reasoning != nil {
+		state.ReasoningEffort = *reasoning
+	}
+	state.HandleToolFunction = func(name string, args json.RawMessage) any {
+		switch name {
+		case "get_time":
+			return toolResponse{
+				Time: time.Now().Format(time.RFC3339),
+			}
+		default:
+			return toolResponse{
+				Error: fmt.Sprintf("Unknown tool: %s", name),
+			}
+		}
+	}
+
 	session := aikit.Session{
 		Provider: provider,
+		State:    state,
 	}
-	request := aikit.InferenceRequest{
-		Model:           modelname,
-		ReasoningEffort: reasoning,
-		SystemPrompt:    sys_prompt,
-		Prompt:          prompt,
-		Tools:           tools,
-		ToolHandler: func(name string, args json.RawMessage) any {
-			return toolResponse{
-				Time: time.Now().String(),
-			}
-		},
-	}
-	return session, request
+
+	return session
 }
 
 func SnapshotResult(results aikit.ProviderState) string {

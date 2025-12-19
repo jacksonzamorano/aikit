@@ -3,16 +3,21 @@ package aikit
 import "encoding/json"
 
 type CompletionsRequest struct {
-	Model    string               `json:"model"`
-	Messages []CompletionsMessage `json:"messages"`
-	Tools    []map[string]any     `json:"tools,omitempty"`
+	Model           string               `json:"model"`
+	Messages        []CompletionsMessage `json:"messages"`
+	Tools           []map[string]any     `json:"tools,omitempty"`
+	Stream          bool                 `json:"stream,omitempty"`
+	StreamOptions   map[string]any       `json:"stream_options,omitempty"`
+	ReasoningEffort string               `json:"reasoning_effort,omitempty"`
 }
 type CompletionsMessage struct {
-	Id         string                `json:"id,omitempty"`
-	Role       string                `json:"role,omitempty"`
-	Content    []CompletionTextBlock `json:"content,omitempty"`
-	ToolCalls  []CompletionsToolCall `json:"tool_calls,omitempty"`
-	ToolCallId string                `json:"tool_call_id,omitempty"`
+	Id               string                `json:"id,omitempty"`
+	Role             string                `json:"role,omitempty"`
+	Content          any                   `json:"content,omitempty"`
+	ReasoningContent string                `json:"reasoning_content,omitempty"`
+	ToolCalls        []CompletionsToolCall `json:"tool_calls,omitempty"`
+	ToolCallId       string                `json:"tool_call_id,omitempty"`
+	Name             string                `json:"name,omitempty"`
 }
 type CompletionTextBlock struct {
 	Type string `json:"type"`
@@ -56,7 +61,7 @@ type CompletionsStreamChoice struct {
 type CompletionsStreamDelta struct {
 	Role             string                     `json:"role,omitempty"`
 	Content          string                     `json:"content,omitempty"`
-	ReasoningContent string                     `json:"reasoning_content,omitempty"`
+	ReasoningContent string                     `json:"reasoning,omitempty"`
 	ToolCalls        []CompletionsToolCallDelta `json:"tool_calls,omitempty"`
 }
 

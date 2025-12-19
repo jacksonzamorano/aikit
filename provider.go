@@ -4,61 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 )
-
-// InferenceClient is the default HTTP client used by providers when they are not
-// configured with a custom *http.Client.
-//
-// This is intentionally a value (not a pointer) so callers can override fields
-// like Transport/Timeout without additional allocation.
-var InferenceClient http.Client
-
-type InferenceRequest struct {
-	Model           string
-	ReasoningEffort *string
-	SystemPrompt    string
-	Prompt          string
-	Tools           map[string]ToolDefinition
-	MaxWebSearches  int
-	ToolHandler     func(string, json.RawMessage) any
-}
-
-// NewInferenceRequest returns an InferenceRequest with all optional fields left
-// unset (nil), including MaxWebSearches.
-func NewInferenceRequest() *InferenceRequest {
-	return &InferenceRequest{}
-}
-
-type InferenceResult struct {
-	Success      bool
-	Output       string
-	Citations    []string
-	Data         []byte
-	InputTokens  int64
-	OutputTokens int64
-	CacheRead    int64
-	CacheWrite   int64
-	ExtraUsage   float64
-}
-
-func sanitizeInput(input string) string {
-	return strings.ReplaceAll(input, "\r\n", "\n")
-}
-func (ir *InferenceRequest) PrepareTemplate() string {
-	return sanitizeInput(ir.Prompt)
-}
-
-func reasoningEffortValue(reasoningEffort *string) (string, bool) {
-	if reasoningEffort == nil {
-		return "", false
-	}
-	v := strings.TrimSpace(*reasoningEffort)
-	if v == "" || strings.EqualFold(v, "disabled") {
-		return "", false
-	}
-	return v, true
-}
 
 type InferenceBlockType string
 
@@ -75,12 +21,12 @@ const (
 type InferenceToolCall struct {
 	ID        string
 	Name      string
-	Arguments json.RawMessage
+	Arguments json.RawMessage `json:"-"`
 }
 
 type InferenceToolResult struct {
 	ToolCallID string
-	Output     json.RawMessage
+	Output     json.RawMessage `json:"-"`
 }
 
 type InferenceBlock struct {
@@ -95,19 +41,21 @@ type InferenceBlock struct {
 }
 
 type ProviderState struct {
-	WebSearchEnabled bool             `json:"web_search"`
-	ReasoningEffort  string           `json:"reasoning_effort"`
-	Tools            []ToolDefinition `json:"tools"`
+	WebSearchEnabled   bool                                        `json:"web_search"`
+	ReasoningEffort    string                                      `json:"reasoning_effort"`
+	Tools              map[string]ToolDefinition                   `json:"tools"`
+	HandleToolFunction func(name string, args json.RawMessage) any `json:"-"`
 
 	Success bool                `json:"success"`
 	Error   *ProviderError      `json:"error,omitempty"`
 	Result  ProviderStateResult `json:"result"`
 
-	Provider   string `json:"provider,omitempty"`
 	Model      string `json:"model,omitempty"`
 	ResponseID string `json:"response_id,omitempty"`
 
 	Blocks []*InferenceBlock `json:"blocks"`
+
+	incompleteToolCalls int
 }
 
 type ProviderStateResult struct {
@@ -118,7 +66,7 @@ type ProviderStateResult struct {
 }
 
 func (state *ProviderState) Debug() string {
-	dbg := fmt.Sprintf("ProviderState: Success=%v, Error=%q, Provider=%q, Model=%q\n", state.Success, state.Error, state.Provider, state.Model)
+	dbg := fmt.Sprintf("ProviderState: Success=%v, Error=%q, Model=%q\n", state.Success, state.Error, state.Model)
 	for i, b := range state.Blocks {
 		dbg += fmt.Sprintf(" Block %d: ID=%q, Type=%q, Complete=%v: '%s'\n", i, b.ID, b.Type, b.Complete, b.Text)
 	}
@@ -142,6 +90,10 @@ func (s *ProviderState) create(id string, typ InferenceBlockType) *InferenceBloc
 	return b
 }
 
+func (s *ProviderState) NewBlockId(typ InferenceBlockType) string {
+	return fmt.Sprintf("%s-%d", typ, len(s.Blocks)+1)
+}
+
 func (s *ProviderState) Get(id string) *InferenceBlock {
 	for blockIdx := range s.Blocks {
 		if s.Blocks[blockIdx].ID == id {
@@ -158,39 +110,34 @@ func (s *ProviderState) Input(text string) {
 	b := s.create("", InferenceBlockInput)
 	b.Text = text
 }
-func (s *ProviderState) Text(id string, text string) {
-	var b *InferenceBlock
-	for blockIdx := range s.Blocks {
-		if s.Blocks[blockIdx].ID == id && s.Blocks[blockIdx].Type == InferenceBlockText {
-			b = s.Blocks[blockIdx]
+func (s *ProviderState) latestBlock(ofType InferenceBlockType) *InferenceBlock {
+	blockIdx := len(s.Blocks) - 1
+	for blockIdx > 0 {
+		if s.Blocks[blockIdx].Type == ofType {
+			return s.Blocks[blockIdx]
 		}
+		blockIdx--
 	}
+	return nil
+}
+func (s *ProviderState) Text(text string) {
+	b := s.latestBlock(InferenceBlockText)
 	if b == nil {
-		b = s.create(id, InferenceBlockText)
+		b = s.create(s.NewBlockId(InferenceBlockText), InferenceBlockText)
 	}
 	b.Text += text
 }
 func (s *ProviderState) Cite(id string, citation string) {
-	var b *InferenceBlock
-	for blockIdx := range s.Blocks {
-		if s.Blocks[blockIdx].ID == id && s.Blocks[blockIdx].Type == InferenceBlockText {
-			b = s.Blocks[blockIdx]
-		}
-	}
+	b := s.latestBlock(InferenceBlockText)
 	if b == nil {
-		b = s.create(id, InferenceBlockText)
+		b = s.create(s.NewBlockId(InferenceBlockText), InferenceBlockText)
 	}
 	b.Citations = append(b.Citations, citation)
 }
-func (s *ProviderState) Thinking(id string, text string, signature string) {
-	var b *InferenceBlock
-	for blockIdx := range s.Blocks {
-		if s.Blocks[blockIdx].ID == id && s.Blocks[blockIdx].Type == InferenceBlockThinking {
-			b = s.Blocks[blockIdx]
-		}
-	}
+func (s *ProviderState) Thinking(text string, signature string) {
+	b := s.latestBlock(InferenceBlockThinking)
 	if b == nil {
-		b = s.create(id, InferenceBlockThinking)
+		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
 	}
 	b.Text += text
 	b.Signature += signature
@@ -208,6 +155,7 @@ func (s *ProviderState) ToolCall(id string, toolCallId string, name string, argu
 	}
 	if b == nil {
 		b = s.create(id, InferenceBlockToolCall)
+		s.incompleteToolCalls++
 	}
 	if b.ToolCall == nil {
 		b.ToolCall = &InferenceToolCall{
@@ -219,18 +167,44 @@ func (s *ProviderState) ToolCall(id string, toolCallId string, name string, argu
 		b.ToolCall.Arguments = append(b.ToolCall.Arguments, arguments...)
 	}
 }
-func (s *ProviderState) ToolResult(toolCallID string, output json.RawMessage) {
-	b := s.create("", InferenceBlockToolResult)
+func (s *ProviderState) ToolCallWithThinking(id string, toolCallId string, name string, arguments json.RawMessage, thinkingText string, thinkingSignature string) {
+	var b *InferenceBlock
+	for blockIdx := range s.Blocks {
+		if s.Blocks[blockIdx].ID == id && s.Blocks[blockIdx].Type == InferenceBlockToolCall {
+			b = s.Blocks[blockIdx]
+		}
+	}
+	if b == nil {
+		b = s.create(id, InferenceBlockToolCall)
+	}
+	if b.ToolCall == nil {
+		b.ToolCall = &InferenceToolCall{
+			ID:        toolCallId,
+			Name:      name,
+			Arguments: arguments,
+		}
+		s.incompleteToolCalls++
+	} else {
+		b.ToolCall.Arguments = append(b.ToolCall.Arguments, arguments...)
+	}
+	b.Text = thinkingText
+	b.Signature = thinkingSignature
+}
+func (s *ProviderState) ToolResult(toolCall *InferenceToolCall, output json.RawMessage) {
+	s.incompleteToolCalls--
+	b := s.create(s.NewBlockId(InferenceBlockToolResult), InferenceBlockToolResult)
 	b.ToolResult = &InferenceToolResult{
-		ToolCallID: toolCallID,
+		ToolCallID: toolCall.ID,
 		Output:     output,
 	}
+	b.ToolCall = toolCall
 }
 
 type InferenceProvider interface {
-	// Infer runs an inference request and always returns a complete transcript
-	// state (blocks).
-	//
-	// If onPartial is non-nil, the provider may stream partial updates through it.
-	Infer(request *InferenceRequest, onPartial func(*ProviderState)) *ProviderState
+	Transport() InferenceTransport
+	InitSession(state *ProviderState)
+	PrepareForUpdates()
+	Update(block *InferenceBlock)
+	MakeRequest(state *ProviderState) *http.Request
+	OnChunk(data []byte, state *ProviderState) ChunkResult
 }

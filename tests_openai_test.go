@@ -7,20 +7,12 @@ import (
 	"github.com/jacksonzamorano/aikit"
 )
 
-var openaiTestReasoningEffort = "minimal"
-var openaiTestProvider = aikit.ResponsesAPI{
-	Config: aikit.ProviderConfig{
-		BaseURL: "https://api.openai.com",
-		APIKey:  os.Getenv("OPENAI_KEY"),
-	},
-}
+var openaiTestReasoningEffort = "high"
 
-func TestOpenAi(t *testing.T) {
+func TestOpenAI(t *testing.T) {
 	all := ""
-	session, request := MakeRequest(openaiTestProvider, "gpt-5-nano", &openaiTestReasoningEffort)
-	result := session.Stream(request, func(result *aikit.ProviderState) {
-		all += SnapshotResult(*result)
-	})
+	session := MakeRequest(aikit.OpenAIProvider(os.Getenv("OPENAI_KEY")), "gpt-5-nano", &openaiTestReasoningEffort)
+	result := session.Stream(func(result *aikit.ProviderState) { })
 	all += SnapshotResult(*result)
 	VerifyResults(t, all, *result)
 }
