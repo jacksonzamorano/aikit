@@ -2,6 +2,13 @@ package aikit
 
 import "encoding/json"
 
+type VertexRequest struct {
+	Contents []VertexContent `json:"contents"`
+	Tools    VertexTools     `json:"tools"`
+}
+type VertexTools struct {
+	FunctionDeclarations []map[string]any `json:"functionDeclarations,omitempty"`
+}
 type VertexGenerateContentResponse struct {
 	Candidates []VertexCandidate   `json:"candidates"`
 	Usage      VertexUsageMetadata `json:"usageMetadata"`
