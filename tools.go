@@ -14,7 +14,7 @@ type ToolDefinition struct {
 type ToolJsonSchema struct {
 	Type        string                     `json:"type,omitempty"`
 	Description string                     `json:"description,omitempty"`
-	Properties  map[string]*ToolJsonSchema `json:"properties"`
+	Properties  map[string]*ToolJsonSchema `json:"properties,omitempty"`
 	Items       *ToolJsonSchema            `json:"items,omitempty"`
 	Required    []string                   `json:"required,omitempty"`
 
