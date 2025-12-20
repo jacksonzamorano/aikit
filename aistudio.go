@@ -7,22 +7,22 @@ import (
 	"net/url"
 )
 
-type AIStudioAPI struct {
-	Config  ProviderConfig
+type AIStudioAPIRequest struct {
+	Config  *ProviderConfig
 	request AIStudioRequest
 }
 
-func (p *AIStudioAPI) Name() string {
+func (p *AIStudioAPIRequest) Name() string {
 	return "aistudio." + p.Config.Name
 }
-func (p *AIStudioAPI) Transport() GatewayTransport {
+func (p *AIStudioAPIRequest) Transport() GatewayTransport {
 	return TransportSSE
 }
 
-func (p *AIStudioAPI) PrepareForUpdates() {
+func (p *AIStudioAPIRequest) PrepareForUpdates() {
 }
 
-func (p *AIStudioAPI) InitSession(thread *Thread) {
+func (p *AIStudioAPIRequest) InitSession(thread *Thread) {
 	tools := []map[string]any{}
 	for k := range thread.Tools {
 		tool := map[string]any{}
@@ -40,7 +40,7 @@ func (p *AIStudioAPI) InitSession(thread *Thread) {
 	}
 }
 
-func (p *AIStudioAPI) Update(block *ThreadBlock) {
+func (p *AIStudioAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
 		p.request.Contents = append(p.request.Contents, AIStudioContent{
@@ -93,7 +93,7 @@ func (p *AIStudioAPI) Update(block *ThreadBlock) {
 	}
 }
 
-func (p AIStudioAPI) MakeRequest(thread *Thread) *http.Request {
+func (p AIStudioAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	modelsBase := p.Config.resolveEndpoint("/v1beta/models/")
 	endpoint, _ := url.JoinPath(modelsBase, thread.Model+":streamGenerateContent")
 	u, _ := url.Parse(endpoint)
@@ -107,7 +107,7 @@ func (p AIStudioAPI) MakeRequest(thread *Thread) *http.Request {
 	return providerReq
 }
 
-func (p AIStudioAPI) OnChunk(data []byte, thread *Thread) ChunkResult {
+func (p AIStudioAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	var chunk AIStudioGenerateContentResponse
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
@@ -140,7 +140,7 @@ func (p AIStudioAPI) OnChunk(data []byte, thread *Thread) ChunkResult {
 	return AcceptedResult()
 }
 
-func (p AIStudioAPI) ParseHttpError(code int, body []byte) *AIError {
+func (p AIStudioAPIRequest) ParseHttpError(code int, body []byte) *AIError {
 	var data AIStudioErrorResponse
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil
@@ -151,6 +151,9 @@ func (p AIStudioAPI) ParseHttpError(code int, body []byte) *AIError {
 	case 429:
 		return RateLimitError(p.Name(), data.Error.Message)
 	default:
+		if len(data.Error.Message) == 0 {
+			return UnknownError(p.Name(), string(body))
+		}
 		return UnknownError(p.Name(), data.Error.Message)
 	}
 }

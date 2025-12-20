@@ -70,7 +70,7 @@ func CreateCompletionsSession(config *ProviderConfig) *Session {
 func CreateAIStudioSession(config *ProviderConfig) *Session {
 	return &Session{
 		Thread: NewProviderState(),
-		Provider: &CompletionsAPIRequest{
+		Provider: &AIStudioAPIRequest{
 			Config: config,
 		},
 	}

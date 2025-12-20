@@ -154,8 +154,13 @@ func (p *CompletionsAPIRequest) ParseHttpError(code int, body []byte) *AIError {
 	switch code {
 	case 401, 403:
 		return AuthenticationError(p.Name(), string(body))
+	case 404:
+		return ConfigurationError(p.Name(), string(body))
 	case 429:
 		return RateLimitError(p.Name(), string(body))
+	}
+	if len(errResp.Error.Message) == 0 {
+		return UnknownError(p.Name(), string(body))
 	}
 	return UnknownError(p.Name(), errResp.Error.Message)
 }
