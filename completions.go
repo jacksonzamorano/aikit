@@ -7,65 +7,65 @@ import (
 	"net/http"
 )
 
-type CompletionsAPI struct {
-	Config  ProviderConfig
-	Request CompletionsRequest
+type CompletionsAPIRequest struct {
+	Config *ProviderConfig
 
+	request  CompletionsRequest
 	lastTool string
 }
 
-func (p *CompletionsAPI) Name() string {
+func (p *CompletionsAPIRequest) Name() string {
 	return fmt.Sprintf("completions.%s", p.Config.Name)
 }
 
-func (p *CompletionsAPI) Transport() GatewayTransport {
+func (p *CompletionsAPIRequest) Transport() GatewayTransport {
 	return TransportSSE
 }
 
-func (p *CompletionsAPI) PrepareForUpdates() {}
+func (p *CompletionsAPIRequest) PrepareForUpdates() {}
 
-func (p *CompletionsAPI) InitSession(state *Thread) {
+func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
 	tools := make([]map[string]any, 0)
-	for name := range state.Tools {
+	for name := range thread.Tools {
 		toolSpec := map[string]any{}
-		toolSpec["description"] = state.Tools[name].Description
-		toolSpec["parameters"] = state.Tools[name].Parameters
+		toolSpec["description"] = thread.Tools[name].Description
+		toolSpec["parameters"] = thread.Tools[name].Parameters
 		toolSpec["name"] = name
 		tools = append(tools, map[string]any{
 			"type":     "function",
 			"function": toolSpec,
 		})
 	}
-	p.Request = CompletionsRequest{
+	p.request = CompletionsRequest{
 		Messages: []CompletionsMessage{},
-		Model:    state.Model,
+		Model:    thread.Model,
 		Tools:    tools,
 		Stream:   true,
 		StreamOptions: map[string]any{
 			"include_usage": true,
 		},
-		ReasoningEffort: state.ReasoningEffort,
+		ReasoningEffort: thread.ReasoningEffort,
 	}
 }
 
-func (p *CompletionsAPI) Update(block *ThreadBlock) {
+func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
-		p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
+		p.request.Messages = append(p.request.Messages, CompletionsMessage{
 			Role: "user",
 			Content: []CompletionTextBlock{
 				{Type: "text", Text: block.Text},
 			},
 		})
 	case InferenceBlockText:
-		p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
+		p.request.Messages = append(p.request.Messages, CompletionsMessage{
 			Role: "assistant",
 			Content: []CompletionTextBlock{
 				{Type: "text", Text: block.Text},
 			},
 		})
 	case InferenceBlockToolCall:
-		p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
+		p.request.Messages = append(p.request.Messages, CompletionsMessage{
 			Role: "assistant",
 			ToolCalls: []CompletionsToolCall{{
 				Id:   block.ID,
@@ -77,7 +77,7 @@ func (p *CompletionsAPI) Update(block *ThreadBlock) {
 			}},
 		})
 		if block.ToolResult != nil {
-			p.Request.Messages = append(p.Request.Messages, CompletionsMessage{
+			p.request.Messages = append(p.request.Messages, CompletionsMessage{
 				Role:       "tool",
 				Content:    string(block.ToolResult.Output),
 				Name:       block.ToolCall.Name,
@@ -87,9 +87,9 @@ func (p *CompletionsAPI) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *CompletionsAPI) MakeRequest(state *Thread) *http.Request {
+func (p *CompletionsAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	endpoint := p.Config.resolveEndpoint("/v1/chat/completions")
-	body, _ := json.Marshal(p.Request)
+	body, _ := json.Marshal(p.request)
 	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
 	providerReq.Header.Add("Content-Type", "application/json")
 	providerReq.Header.Add("Accept", "text/event-stream")
@@ -97,28 +97,28 @@ func (p *CompletionsAPI) MakeRequest(state *Thread) *http.Request {
 	return providerReq
 }
 
-func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
+func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	var chunk CompletionsStreamChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
 
-	state.ThreadId = chunk.Id
+	thread.ThreadId = chunk.Id
 
 	if chunk.Usage != nil {
 		nonCachedInput := max(chunk.Usage.PromptTokens-chunk.Usage.PromptTokenDetails.CachedTokens, 0)
-		state.Result.InputTokens += nonCachedInput
-		state.Result.OutputTokens += chunk.Usage.CompletionTokens
-		state.Result.CacheReadTokens += chunk.Usage.PromptTokenDetails.CachedTokens
+		thread.Result.InputTokens += nonCachedInput
+		thread.Result.OutputTokens += chunk.Usage.CompletionTokens
+		thread.Result.CacheReadTokens += chunk.Usage.PromptTokenDetails.CachedTokens
 	}
 
 	for _, choice := range chunk.Choices {
 		id := fmt.Sprintf("%s-%d", chunk.Id, choice.Index)
 		if choice.Delta.ReasoningContent != "" {
-			state.Thinking(id, choice.Delta.ReasoningContent)
+			thread.Thinking(id, choice.Delta.ReasoningContent)
 		}
 		if choice.Delta.Content != "" {
-			state.Text(id, choice.Delta.Content)
+			thread.Text(id, choice.Delta.Content)
 		}
 
 		for i := range choice.Delta.ToolCalls {
@@ -130,16 +130,16 @@ func (p *CompletionsAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 				p.lastTool = id
 			}
 
-			state.ToolCall(id, tc.Function.Name, tc.Function.Arguments)
+			thread.ToolCall(id, tc.Function.Name, tc.Function.Arguments)
 		}
 		if choice.FinishReason != nil {
-			state.Complete(id)
+			thread.Complete(id)
 		}
 	}
 	return AcceptedResult()
 }
 
-func (p *CompletionsAPI) ParseHttpError(code int, body []byte) *AIError {
+func (p *CompletionsAPIRequest) ParseHttpError(code int, body []byte) *AIError {
 	var errResp CompletionsErrorResponse
 	if err := json.Unmarshal(body, &errResp); err == nil {
 		switch errResp.Error.Type {

@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-type Gateway interface {
+type APIRequest interface {
 	Name() string
 	Transport() GatewayTransport
 	InitSession(state *Thread)

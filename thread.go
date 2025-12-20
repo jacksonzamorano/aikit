@@ -54,10 +54,6 @@ func NewProviderState() *Thread {
 	return &Thread{}
 }
 
-func NewProviderRequestState() *Thread {
-	return NewProviderState()
-}
-
 func (s *Thread) create(id string, typ ThreadBlockType) *ThreadBlock {
 	b := &ThreadBlock{
 		ID:   id,

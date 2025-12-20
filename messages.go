@@ -15,67 +15,65 @@ type messagesLastToolCall struct {
 	ToolName string
 }
 
-// MessagesAPI implements the Messages API shape (Anthropic-style).
+// MessagesAPIRequest implements the Messages API shape (Anthropic-style).
 // Configurable BaseURL/Endpoint allows pointing at compatible endpoints.
-type MessagesAPI struct {
-	Config               ProviderConfig
-	Request              MessagesRequest
-	Version              string
-	BetaFeatures         []string
+type MessagesAPIRequest struct {
+	Config *ProviderConfig
 
+	request      MessagesRequest
 	lastToolCall messagesLastToolCall
 }
 
-func (p *MessagesAPI) blockId(thread *Thread, index int) string {
+func (p *MessagesAPIRequest) blockId(thread *Thread, index int) string {
 	return fmt.Sprintf("%s.%d", thread.ThreadId, index)
 }
 
-func (p *MessagesAPI) Name() string {
+func (p *MessagesAPIRequest) Name() string {
 	return fmt.Sprintf("messages.%s", p.Config.Name)
 }
 
-func (p *MessagesAPI) Transport() GatewayTransport {
+func (p *MessagesAPIRequest) Transport() GatewayTransport {
 	return TransportSSE
 }
 
-func (p *MessagesAPI) PrepareForUpdates() {}
+func (p *MessagesAPIRequest) PrepareForUpdates() {}
 
-func (p *MessagesAPI) InitSession(state *Thread) {
+func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 	tools := make([]map[string]any, 0)
-	for name := range state.Tools {
+	for name := range thread.Tools {
 		toolSpec := map[string]any{}
-		toolSpec["description"] = state.Tools[name].Description
-		toolSpec["input_schema"] = state.Tools[name].Parameters
+		toolSpec["description"] = thread.Tools[name].Description
+		toolSpec["input_schema"] = thread.Tools[name].Parameters
 		toolSpec["name"] = name
 		tools = append(tools, toolSpec)
 	}
 
-	if state.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
+	if thread.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
 		tools = append(tools, map[string]any{
 			"type":     p.Config.WebSearchToolName,
 			"name":     "web_search",
-			"max_uses": state.MaxWebSearches,
+			"max_uses": thread.MaxWebSearches,
 		})
 	}
-	if state.WebFetchEnabled && p.Config.WebFetchToolName != "" {
+	if thread.WebFetchEnabled && p.Config.WebFetchToolName != "" {
 		tools = append(tools, map[string]any{
 			"type": p.Config.WebFetchToolName,
 			"name": "web_fetch",
 		})
 	}
 
-	p.Request = MessagesRequest{
+	p.request = MessagesRequest{
 		Messages:  []MessagesMessage{},
-		Model:     state.Model,
+		Model:     thread.Model,
 		Tools:     tools,
 		MaxTokens: 10_000,
 		Stream:    true,
 	}
 
-	if len(state.ReasoningEffort) > 0 {
-		if parsed, err := strconv.Atoi(state.ReasoningEffort); err == nil {
+	if len(thread.ReasoningEffort) > 0 {
+		if parsed, err := strconv.Atoi(thread.ReasoningEffort); err == nil {
 			budgetTokens := int64(parsed)
-			p.Request.Thinking = &MessagesThinking{
+			p.request.Thinking = &MessagesThinking{
 				BudgetTokens: budgetTokens,
 				Type:         "enabled",
 			}
@@ -83,10 +81,10 @@ func (p *MessagesAPI) InitSession(state *Thread) {
 	}
 }
 
-func (p *MessagesAPI) Update(block *ThreadBlock) {
+func (p *MessagesAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
-		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "user",
 			Content: []MessagesContent{
 				{
@@ -99,7 +97,7 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 			},
 		})
 	case InferenceBlockText:
-		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "assistant",
 			Content: []MessagesContent{
 				{
@@ -109,7 +107,7 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 			},
 		})
 	case InferenceBlockThinking:
-		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "assistant",
 			Content: []MessagesContent{
 				{
@@ -120,7 +118,7 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 			},
 		})
 	case InferenceBlockEncryptedThinking:
-		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "assistant",
 			Content: []MessagesContent{
 				{
@@ -130,7 +128,7 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 			},
 		})
 	case InferenceBlockToolCall:
-		p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "assistant",
 			Content: []MessagesContent{
 				{
@@ -142,7 +140,7 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 			},
 		})
 		if block.ToolResult != nil {
-			p.Request.Messages = append(p.Request.Messages, MessagesMessage{
+			p.request.Messages = append(p.request.Messages, MessagesMessage{
 				Role: "user",
 				Content: []MessagesContent{
 					{
@@ -156,24 +154,26 @@ func (p *MessagesAPI) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *MessagesAPI) MakeRequest(state *Thread) *http.Request {
+func (p *MessagesAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	endpoint := p.Config.resolveEndpoint("/v1/messages")
-	body, _ := json.Marshal(p.Request)
+	body, _ := json.Marshal(p.request)
 	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
 	providerReq.Header.Add("Content-Type", "application/json")
 	providerReq.Header.Add("Accept", "text/event-stream")
-	if p.Version == "" {
-		p.Version = "2023-06-01"
+	if p.Config.APIVersion == "" {
+		providerReq.Header.Add("anthropic-version", "2023-06-11")
+	} else {
+		providerReq.Header.Add("anthropic-version", p.Config.APIVersion)
 	}
-	providerReq.Header.Add("anthropic-version", p.Version)
+
 	providerReq.Header.Add("x-api-key", p.Config.APIKey)
-	if len(p.BetaFeatures) > 0 {
-		providerReq.Header.Add("x-beta-features", fmt.Sprintf("%s", p.BetaFeatures))
+	if len(p.Config.BetaFeatures) > 0 {
+		providerReq.Header.Add("x-beta-features", fmt.Sprintf("%s", p.Config.BetaFeatures))
 	}
 	return providerReq
 }
 
-func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
+func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	var env MessagesStreamEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
@@ -197,50 +197,50 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 	case "message_start":
 		var ms MessagesStreamMessageStart
 		if err := json.Unmarshal(data, &ms); err == nil {
-			if state.ThreadId == "" && ms.Message.ID != "" {
-				state.ThreadId = ms.Message.ID
+			if thread.ThreadId == "" && ms.Message.ID != "" {
+				thread.ThreadId = ms.Message.ID
 			}
 			usage := ms.Message.Usage
-			state.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
-			state.Result.CacheReadTokens += usage.CacheReadInputTokens
-			state.Result.CacheWriteTokens += usage.CacheCreationInputTokens
-			state.Result.OutputTokens += usage.OutputTokens
+			thread.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
+			thread.Result.CacheReadTokens += usage.CacheReadInputTokens
+			thread.Result.CacheWriteTokens += usage.CacheCreationInputTokens
+			thread.Result.OutputTokens += usage.OutputTokens
 		}
 	case "message_delta":
 		var md MessagesStreamMessageDelta
 		if err := json.Unmarshal(data, &md); err == nil {
 			usage := md.Usage
-			state.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
-			state.Result.OutputTokens += usage.OutputTokens
-			state.Result.CacheReadTokens += usage.CacheReadInputTokens
-			state.Result.CacheWriteTokens += usage.CacheCreationInputTokens
+			thread.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
+			thread.Result.OutputTokens += usage.OutputTokens
+			thread.Result.CacheReadTokens += usage.CacheReadInputTokens
+			thread.Result.CacheWriteTokens += usage.CacheCreationInputTokens
 		}
 	case "content_block_start":
 		var cbs MessagesStreamContentBlockStart
 		if err := json.Unmarshal(data, &cbs); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 		}
-		blockId := p.blockId(state, cbs.Index)
+		blockId := p.blockId(thread, cbs.Index)
 		switch cbs.ContentBlock.Type {
 		case "thinking":
-			state.Thinking(blockId, cbs.ContentBlock.Thinking)
-			state.ThinkingSignature(blockId, cbs.ContentBlock.Signature)
+			thread.Thinking(blockId, cbs.ContentBlock.Thinking)
+			thread.ThinkingSignature(blockId, cbs.ContentBlock.Signature)
 		case "redacted_thinking":
-			state.EncryptedThinking(cbs.ContentBlock.Data)
+			thread.EncryptedThinking(cbs.ContentBlock.Data)
 		case "tool_use":
-			state.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, string(cbs.ContentBlock.Input))
+			thread.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, string(cbs.ContentBlock.Input))
 			p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: false}
 		case "server_tool_use":
 			switch cbs.ContentBlock.Name {
 			case "web_search":
-				state.WebSearch(cbs.ContentBlock.ID)
+				thread.WebSearch(cbs.ContentBlock.ID)
 				p.lastToolCall = messagesLastToolCall{
 					ID:       cbs.ContentBlock.ID,
 					IsServer: true,
 					ToolName: "web_search",
 				}
 			case "web_fetch":
-				state.ViewWebpage(cbs.ContentBlock.ID)
+				thread.ViewWebpage(cbs.ContentBlock.ID)
 				p.lastToolCall = messagesLastToolCall{
 					ID:       cbs.ContentBlock.ID,
 					IsServer: true,
@@ -249,38 +249,38 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 			}
 		case "web_search_tool_result":
 			for _, search := range cbs.ContentBlock.Content {
-				state.WebSearchResult(cbs.ContentBlock.ToolUseId, ThreadWebSearchResult{
+				thread.WebSearchResult(cbs.ContentBlock.ToolUseId, ThreadWebSearchResult{
 					Title: search.Title,
 					URL:   search.URL,
 				})
 			}
-			state.CompleteWebSearch(cbs.ContentBlock.ToolUseId)
+			thread.CompleteWebSearch(cbs.ContentBlock.ToolUseId)
 		case "text":
-			state.Text(blockId, cbs.ContentBlock.Text)
+			thread.Text(blockId, cbs.ContentBlock.Text)
 		}
 	case "content_block_delta":
 		var cbd MessagesStreamContentDelta
 		if err := json.Unmarshal(data, &cbd); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 		}
-		blockId := p.blockId(state, cbd.Index)
+		blockId := p.blockId(thread, cbd.Index)
 
 		switch cbd.Delta.Type {
 		case "text_delta":
-			state.Text(blockId, cbd.Delta.Text)
+			thread.Text(blockId, cbd.Delta.Text)
 		case "citations_delta":
 			if cbd.Delta.Citation != nil {
-				state.Cite(blockId, cbd.Delta.Citation.Url)
+				thread.Cite(blockId, cbd.Delta.Citation.Url)
 			}
 		case "thinking_delta":
-			state.Thinking(blockId, cbd.Delta.Thinking)
+			thread.Thinking(blockId, cbd.Delta.Thinking)
 		case "signature_delta":
-			state.ThinkingSignature(blockId, cbd.Delta.Signature)
+			thread.ThinkingSignature(blockId, cbd.Delta.Signature)
 		case "input_json_delta":
 			if p.lastToolCall.IsServer {
 				p.lastToolCall.Buffer += cbd.Delta.PartialJSON
 			} else {
-				state.ToolCall(p.lastToolCall.ID, "", "")
+				thread.ToolCall(p.lastToolCall.ID, "", "")
 			}
 		}
 	case "content_block_stop":
@@ -297,24 +297,24 @@ func (p *MessagesAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
 						return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 					}
-					state.WebSearchQuery(p.lastToolCall.ID, output.Query)
+					thread.WebSearchQuery(p.lastToolCall.ID, output.Query)
 				case "web_fetch":
 					var output MessagesWebFetchQuery
 					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
 						return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 					}
-					state.ViewWebpageUrl(p.lastToolCall.ID, output.URL)
+					thread.ViewWebpageUrl(p.lastToolCall.ID, output.URL)
 				}
 			}
 		}
-		state.Complete(p.blockId(state, cbst.Index))
+		thread.Complete(p.blockId(thread, cbst.Index))
 	case "message_stop":
 		return DoneChunkResult()
 	}
 	return AcceptedResult()
 }
 
-func (p *MessagesAPI) ParseHttpError(code int, body []byte) *AIError {
+func (p *MessagesAPIRequest) ParseHttpError(code int, body []byte) *AIError {
 	var message MessagesErrorResponse
 	if err := json.Unmarshal(body, &message); err == nil {
 		switch code {

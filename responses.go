@@ -7,37 +7,36 @@ import (
 	"net/http"
 )
 
-// ResponsesAPI implements the Responses API shape (OpenAI-style).
-type ResponsesAPI struct {
-	Config          ProviderConfig
-	Request         ResponsesRequest
-	GenerateSummary bool
+// ResponsesAPIRequest implements the Responses API shape (OpenAI-style).
+type ResponsesAPIRequest struct {
+	Config  *ProviderConfig
+	Request ResponsesRequest
 }
 
-func (p *ResponsesAPI) Name() string {
+func (p *ResponsesAPIRequest) Name() string {
 	return fmt.Sprintf("responses.%s", p.Config.Name)
 }
-func (p *ResponsesAPI) Transport() GatewayTransport {
+func (p *ResponsesAPIRequest) Transport() GatewayTransport {
 	return TransportSSE
 }
 
-func (p *ResponsesAPI) PrepareForUpdates() {
+func (p *ResponsesAPIRequest) PrepareForUpdates() {
 	p.Request.Inputs = []ResponsesInput{}
 }
 
-func (p *ResponsesAPI) InitSession(state *Thread) {
+func (p *ResponsesAPIRequest) InitSession(thread *Thread) {
 	tools := []ResponsesTool{}
-	for k := range state.Tools {
+	for k := range thread.Tools {
 		tool := ResponsesTool{
-			Description: state.Tools[k].Description,
-			Parameters:  state.Tools[k].Parameters,
+			Description: thread.Tools[k].Description,
+			Parameters:  thread.Tools[k].Parameters,
 			Name:        k,
 			Type:        "function",
 		}
 		tools = append(tools, tool)
 	}
 
-	if state.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
+	if thread.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
 		tools = append(tools, ResponsesTool{
 			Type: p.Config.WebSearchToolName,
 		})
@@ -46,21 +45,21 @@ func (p *ResponsesAPI) InitSession(state *Thread) {
 	p.Request = ResponsesRequest{
 		Inputs: []ResponsesInput{},
 		Tools:  tools,
-		Model:  state.Model,
+		Model:  thread.Model,
 		Stream: true,
 	}
 
-	if state.ReasoningEffort != "" {
+	if thread.ReasoningEffort != "" {
 		p.Request.Reasoning = &ResponsesReasoning{
-			Effort: state.ReasoningEffort,
+			Effort: thread.ReasoningEffort,
 		}
-		if p.GenerateSummary {
+		if p.Config.UseThinkingSummaries {
 			p.Request.Reasoning.Summary = "auto"
 		}
 	}
 }
 
-func (p *ResponsesAPI) Update(block *ThreadBlock) {
+func (p *ResponsesAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
 		p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{
@@ -86,7 +85,7 @@ func (p *ResponsesAPI) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *ResponsesAPI) MakeRequest(state *Thread) *http.Request {
+func (p *ResponsesAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	body, _ := json.Marshal(p.Request)
 	providerReq, _ := http.NewRequest("POST", p.Config.resolveEndpoint("/v1/responses"), bytes.NewReader(body))
 	providerReq.Header.Add("Content-Type", "application/json")
@@ -95,7 +94,7 @@ func (p *ResponsesAPI) MakeRequest(state *Thread) *http.Request {
 	return providerReq
 }
 
-func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
+func (p *ResponsesAPIRequest) OnChunk(rawData []byte, thread *Thread) ChunkResult {
 
 	var data ResponsesStreamEvent
 	if err := json.Unmarshal(rawData, &data); err != nil {
@@ -105,38 +104,38 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 
 	switch data.Type {
 	case "response.output_text.delta":
-		state.Text(data.ItemId, data.Delta)
+		thread.Text(data.ItemId, data.Delta)
 	case "response.output_text.done":
-		state.Complete(data.ItemId)
+		thread.Complete(data.ItemId)
 	case "response.output_item.done":
 		switch data.Item.Type {
 		case "function_call":
-			state.ToolCall(data.Item.CallId, data.Item.Name, data.Item.Arguments)
+			thread.ToolCall(data.Item.CallId, data.Item.Name, data.Item.Arguments)
 		case "web_search_call":
 			switch data.Item.Action.Type {
 			case "search":
-				state.WebSearchQuery(data.Item.Id, data.Item.Action.Query)
-				state.CompleteWebSearch(data.Item.Id)
+				thread.WebSearchQuery(data.Item.Id, data.Item.Action.Query)
+				thread.CompleteWebSearch(data.Item.Id)
 			case "open_page":
-				state.ViewWebpageUrl(data.Item.Id, data.Item.Action.Url)
+				thread.ViewWebpageUrl(data.Item.Id, data.Item.Action.Url)
 			}
 		case "reasoning":
 			for s := range data.Summary {
-				state.Thinking(data.ItemId, data.Summary[s].Text)
+				thread.Thinking(data.ItemId, data.Summary[s].Text)
 			}
 		}
 	case "response.output_text.annotation.added":
-		state.Cite(data.ItemId, data.Annotation.Url)
+		thread.Cite(data.ItemId, data.Annotation.Url)
 	case "response.reasoning_summary_text.delta":
-		state.Thinking(data.ItemId, data.Delta)
+		thread.Thinking(data.ItemId, data.Delta)
 	case "response.reasoning_summary_text.done":
-		state.Complete(data.ItemId)
+		thread.Complete(data.ItemId)
 	case "response.completed":
 		usage := data.Response.Usage
-		state.Result.CacheReadTokens += usage.InputDetails.CachedTokens
-		state.Result.InputTokens += (usage.InputTokens + usage.PromptTokens - usage.InputDetails.CachedTokens)
-		state.Result.OutputTokens += data.Response.Usage.OutputTokens + data.Response.Usage.PromptTokens
-		state.ThreadId = data.Response.Id
+		thread.Result.CacheReadTokens += usage.InputDetails.CachedTokens
+		thread.Result.InputTokens += (usage.InputTokens + usage.PromptTokens - usage.InputDetails.CachedTokens)
+		thread.Result.OutputTokens += data.Response.Usage.OutputTokens + data.Response.Usage.PromptTokens
+		thread.ThreadId = data.Response.Id
 		p.Request.PreviousResponseID = data.Response.Id
 		return DoneChunkResult()
 	case "error", "response.failed":
@@ -152,6 +151,6 @@ func (p *ResponsesAPI) OnChunk(rawData []byte, state *Thread) ChunkResult {
 	return AcceptedResult()
 }
 
-func (p *ResponsesAPI) ParseHttpError(code int, body []byte) *AIError {
+func (p *ResponsesAPIRequest) ParseHttpError(code int, body []byte) *AIError {
 	return nil
 }

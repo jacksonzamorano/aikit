@@ -38,14 +38,47 @@ func ErrorChunkResult(err *AIError) ChunkResult {
 }
 
 type Session struct {
-	Provider Gateway
-	State    *Thread
+	Provider APIRequest
+	Thread    *Thread
 	Debug    bool
+}
+
+func CreateResponsesSession(config *ProviderConfig) *Session {
+	return &Session{
+		Thread: NewProviderState(),
+		Provider: &ResponsesAPIRequest{
+			Config: config,
+		},
+	}
+}
+func CreateMessagesSession(config *ProviderConfig) *Session {
+	return &Session{
+		Thread: NewProviderState(),
+		Provider: &MessagesAPIRequest{
+			Config: config,
+		},
+	}
+}
+func CreateCompletionsSession(config *ProviderConfig) *Session {
+	return &Session{
+		Thread: NewProviderState(),
+		Provider: &CompletionsAPIRequest{
+			Config: config,
+		},
+	}
+}
+func CreateAIStudioSession(config *ProviderConfig) *Session {
+	return &Session{
+		Thread: NewProviderState(),
+		Provider: &CompletionsAPIRequest{
+			Config: config,
+		},
+	}
 }
 
 func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 	// Perform one-off initialization
-	s.Provider.InitSession(s.State)
+	s.Provider.InitSession(s.Thread)
 
 	// Keep track of changed blocks.
 	lastBlock := 0
@@ -53,50 +86,50 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 		s.Provider.PrepareForUpdates()
 		// Update blocks from last turn.
 		// Will also handle tool calls synchronously.
-		for lastBlock < len(s.State.Blocks) {
-			switch s.State.Blocks[lastBlock].Type {
+		for lastBlock < len(s.Thread.Blocks) {
+			switch s.Thread.Blocks[lastBlock].Type {
 			case InferenceBlockToolCall:
-				block := s.State.Blocks[lastBlock]
-				res := s.State.HandleToolFunction(block.ToolCall.Name, block.ToolCall.Arguments)
+				block := s.Thread.Blocks[lastBlock]
+				res := s.Thread.HandleToolFunction(block.ToolCall.Name, block.ToolCall.Arguments)
 				resBytes, err := json.Marshal(res)
 				if err != nil {
-					s.State.Success = false
-					s.State.Error = &AIError{
+					s.Thread.Success = false
+					s.Thread.Error = &AIError{
 						Category: AIErrorCategoryToolResultError,
 						Message:  err.Error(),
 						Provider: s.Provider.Name(),
 					}
-					return s.State
+					return s.Thread
 				}
-				s.State.ToolResult(block.ToolCall, string(resBytes))
+				s.Thread.ToolResult(block.ToolCall, string(resBytes))
 			}
-			s.Provider.Update(s.State.Blocks[lastBlock])
+			s.Provider.Update(s.Thread.Blocks[lastBlock])
 			lastBlock++
 		}
 
-		req := s.Provider.MakeRequest(s.State)
+		req := s.Provider.MakeRequest(s.Thread)
 		resp, err := http.DefaultClient.Do(req)
 		if s.Debug {
 			log.Printf("[Session] Request made to %s", req.URL.String())
 		}
 		if err != nil {
-			s.State.Success = false
-			s.State.Error = err
-			return s.State
+			s.Thread.Success = false
+			s.Thread.Error = err
+			return s.Thread
 		}
 		if resp.StatusCode >= 300 {
 			err, _ := io.ReadAll(resp.Body)
-			s.State.Success = false
+			s.Thread.Success = false
 			if parsedErr := s.Provider.ParseHttpError(resp.StatusCode, err); parsedErr != nil {
-				s.State.Error = parsedErr
+				s.Thread.Error = parsedErr
 			} else {
-				s.State.Error = &AIError{
+				s.Thread.Error = &AIError{
 					Category: AIErrorCategoryHTTPStatus,
 					Message:  fmt.Sprintf("Unhandled error. Received status code %d with body %s", resp.StatusCode, string(err)),
 					Provider: s.Provider.Name(),
 				}
 			}
-			return s.State
+			return s.Thread
 		}
 		if s.Debug {
 			log.Printf("[Session] Response status: %s", resp.Status)
@@ -115,9 +148,9 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 				if s.Debug {
 					log.Printf("[Session] SSE Event: %s", string(ev.data))
 				}
-				result := s.Provider.OnChunk(ev.data, s.State)
-				if s.State.Updated {
-					onPartial(s.State)
+				result := s.Provider.OnChunk(ev.data, s.Thread)
+				if s.Thread.Updated {
+					onPartial(s.Thread)
 				}
 				if result.Error != nil {
 					return false, result.Error
@@ -128,16 +161,16 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 				return true, nil
 			})
 			if s.Debug {
-				dbg, _ := json.MarshalIndent(s.State, "", "  ")
+				dbg, _ := json.MarshalIndent(s.Thread, "", "  ")
 				log.Printf("[Session] %s", string(dbg))
 			}
 			if err != nil {
-				s.State.Success = false
-				s.State.Error = err
-				return s.State
-			} else if s.State.incompleteToolCalls == 0 {
-				s.State.Success = true
-				return s.State
+				s.Thread.Success = false
+				s.Thread.Error = err
+				return s.Thread
+			} else if s.Thread.incompleteToolCalls == 0 {
+				s.Thread.Success = true
+				return s.Thread
 			}
 		}
 	}

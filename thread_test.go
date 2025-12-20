@@ -19,26 +19,28 @@ type toolResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func MakeRequest(t *testing.T, provider aikit.Gateway, modelname string, reasoning *string) aikit.Session {
+func MakeRequest(t *testing.T, provider aikit.ProviderConfig, modelname string, reasoning *string) *aikit.Session {
 	t.Helper()
-	state := aikit.NewProviderState()
-	state.Model = modelname
-	state.System("You are a helpful assistant. You will always request the current time using the get_time tool and use it in your response.")
-	state.Input("What date is exactly 365 days from today, and what day of the week will it be?")
-	state.Tools = map[string]aikit.ToolDefinition{
+
+	session := provider.Session()
+
+	session.Thread.Model = modelname
+	session.Thread.System("You are a helpful assistant. You will always request the current time using the get_time tool and use it in your response.")
+	session.Thread.Input("What date is exactly 365 days from today, and what day of the week will it be?")
+	session.Thread.Tools = map[string]aikit.ToolDefinition{
 		"get_time": {
 			Description: "Get the current time in ISO 8601 format.",
 			Parameters: &aikit.ToolJsonSchema{
 				Type:       "object",
-				Properties: map[string]*aikit.ToolJsonSchema{},
+				Properties: &map[string]*aikit.ToolJsonSchema{},
 			},
 		},
 	}
 	if reasoning != nil {
-		state.ReasoningEffort = *reasoning
+		session.Thread.ReasoningEffort = *reasoning
 	}
-	state.CoalesceTextBlocks = true
-	state.HandleToolFunction = func(name string, args string) any {
+	session.Thread.CoalesceTextBlocks = true
+	session.Thread.HandleToolFunction = func(name string, args string) any {
 		switch name {
 		case "get_time":
 			return toolResponse{
@@ -51,32 +53,22 @@ func MakeRequest(t *testing.T, provider aikit.Gateway, modelname string, reasoni
 		}
 	}
 
-	session := aikit.Session{
-		Provider: provider,
-		State:    state,
-	}
-
 	return session
 }
 
-func MakeSearchRequest(t *testing.T, provider aikit.Gateway, modelname string, reasoning *string) aikit.Session {
+func MakeSearchRequest(t *testing.T, provider aikit.ProviderConfig, modelname string, reasoning *string) *aikit.Session {
 	t.Helper()
-	state := aikit.NewProviderState()
-	state.Model = modelname
-	state.MaxWebSearches = 1
-	state.CoalesceTextBlocks = true
-	state.System("You are a helpful assistant. Always check for the most up-to-date information.")
-	state.Input("What's new in the newest version of React? Keep your answer concise.")
+	sess := provider.Session()
+	sess.Thread.Model = modelname
+	sess.Thread.MaxWebSearches = 1
+	sess.Thread.CoalesceTextBlocks = true
+	sess.Thread.System("You are a helpful assistant. Always check for the most up-to-date information.")
+	sess.Thread.Input("What's new in the newest version of React? Keep your answer concise.")
 	if reasoning != nil {
-		state.ReasoningEffort = *reasoning
+		sess.Thread.ReasoningEffort = *reasoning
 	}
 
-	session := aikit.Session{
-		Provider: provider,
-		State:    state,
-	}
-
-	return session
+	return sess
 }
 
 func SnapshotResult(results aikit.Thread) string {

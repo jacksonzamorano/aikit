@@ -18,6 +18,16 @@ type ProviderConfig struct {
 
 	WebSearchToolName string
 	WebFetchToolName  string
+
+	BetaFeatures         []string
+	APIVersion           string
+	UseThinkingSummaries bool
+
+	MakeSessionFunction func(*ProviderConfig) *Session
+}
+
+func (c *ProviderConfig) Session() *Session {
+	return c.MakeSessionFunction(c)
 }
 
 func (c ProviderConfig) resolveEndpoint(defaultPath string) string {

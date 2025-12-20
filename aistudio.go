@@ -9,7 +9,7 @@ import (
 
 type AIStudioAPI struct {
 	Config  ProviderConfig
-	Request AIStudioRequest
+	request AIStudioRequest
 }
 
 func (p *AIStudioAPI) Name() string {
@@ -22,17 +22,17 @@ func (p *AIStudioAPI) Transport() GatewayTransport {
 func (p *AIStudioAPI) PrepareForUpdates() {
 }
 
-func (p *AIStudioAPI) InitSession(state *Thread) {
+func (p *AIStudioAPI) InitSession(thread *Thread) {
 	tools := []map[string]any{}
-	for k := range state.Tools {
+	for k := range thread.Tools {
 		tool := map[string]any{}
-		tool["description"] = state.Tools[k].Description
-		tool["parameters"] = state.Tools[k].Parameters
+		tool["description"] = thread.Tools[k].Description
+		tool["parameters"] = thread.Tools[k].Parameters
 		tool["name"] = k
 		tools = append(tools, tool)
 	}
 
-	p.Request = AIStudioRequest{
+	p.request = AIStudioRequest{
 		Contents: []AIStudioContent{},
 		Tools: AIStudioTools{
 			FunctionDeclarations: tools,
@@ -43,27 +43,27 @@ func (p *AIStudioAPI) InitSession(state *Thread) {
 func (p *AIStudioAPI) Update(block *ThreadBlock) {
 	switch block.Type {
 	case InferenceBlockInput:
-		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
+		p.request.Contents = append(p.request.Contents, AIStudioContent{
 			Role: "user",
 			Parts: []AIStudioPart{
 				{Text: block.Text},
 			},
 		})
 	case InferenceBlockSystem:
-		p.Request.SystemInstruction = &AIStudioContent{
+		p.request.SystemInstruction = &AIStudioContent{
 			Parts: []AIStudioPart{
 				{Text: block.Text},
 			},
 		}
 	case InferenceBlockThinking:
-		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
+		p.request.Contents = append(p.request.Contents, AIStudioContent{
 			Role: "model",
 			Parts: []AIStudioPart{
 				{Text: block.Text, Thought: true, ThoughtSignature: block.Signature},
 			},
 		})
 	case InferenceBlockToolCall:
-		p.Request.Contents = append(p.Request.Contents, AIStudioContent{
+		p.request.Contents = append(p.request.Contents, AIStudioContent{
 			Role: "model",
 			Parts: []AIStudioPart{
 				{
@@ -77,7 +77,7 @@ func (p *AIStudioAPI) Update(block *ThreadBlock) {
 			},
 		})
 		if block.ToolResult != nil {
-			p.Request.Contents = append(p.Request.Contents, AIStudioContent{
+			p.request.Contents = append(p.request.Contents, AIStudioContent{
 				Role: "model",
 				Parts: []AIStudioPart{
 					{
@@ -93,33 +93,33 @@ func (p *AIStudioAPI) Update(block *ThreadBlock) {
 	}
 }
 
-func (p AIStudioAPI) MakeRequest(state *Thread) *http.Request {
+func (p AIStudioAPI) MakeRequest(thread *Thread) *http.Request {
 	modelsBase := p.Config.resolveEndpoint("/v1beta/models/")
-	endpoint, _ := url.JoinPath(modelsBase, state.Model+":streamGenerateContent")
+	endpoint, _ := url.JoinPath(modelsBase, thread.Model+":streamGenerateContent")
 	u, _ := url.Parse(endpoint)
 	q := u.Query()
 	q.Set("key", p.Config.APIKey)
 	q.Set("alt", "sse")
 	u.RawQuery = q.Encode()
 
-	body, _ := json.Marshal(p.Request)
+	body, _ := json.Marshal(p.request)
 	providerReq, _ := http.NewRequest("POST", u.String(), bytes.NewReader(body))
 	return providerReq
 }
 
-func (p AIStudioAPI) OnChunk(data []byte, state *Thread) ChunkResult {
+func (p AIStudioAPI) OnChunk(data []byte, thread *Thread) ChunkResult {
 	var chunk AIStudioGenerateContentResponse
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
-	state.Result.InputTokens += chunk.Usage.InputTokens
-	state.Result.OutputTokens += chunk.Usage.OutputTokens
-	state.Result.CacheReadTokens += chunk.Usage.CachedTokens
-	state.ThreadId = chunk.ResponseId
+	thread.Result.InputTokens += chunk.Usage.InputTokens
+	thread.Result.OutputTokens += chunk.Usage.OutputTokens
+	thread.Result.CacheReadTokens += chunk.Usage.CachedTokens
+	thread.ThreadId = chunk.ResponseId
 
 	candidate := chunk.Candidates[0]
 	if candidate.FinishReason != nil {
-		state.Complete(chunk.ResponseId)
+		thread.Complete(chunk.ResponseId)
 		return DoneChunkResult()
 	}
 	for i := range candidate.Content.Parts {
@@ -127,14 +127,14 @@ func (p AIStudioAPI) OnChunk(data []byte, state *Thread) ChunkResult {
 		part := candidate.Content.Parts[i]
 		if part.Text != "" {
 			if part.Thought {
-				state.ThinkingWithSignature(id, part.Text, part.ThoughtSignature)
+				thread.ThinkingWithSignature(id, part.Text, part.ThoughtSignature)
 			} else {
-				state.Text(id, part.Text)
+				thread.Text(id, part.Text)
 			}
 		} else if part.FunctionCall != nil {
-			id := state.NewBlockId(InferenceBlockToolCall)
+			id := thread.NewBlockId(InferenceBlockToolCall)
 			fnCall := part.FunctionCall
-			state.ToolCallWithThinking(id, fnCall.Name, string(fnCall.Args), "", part.ThoughtSignature)
+			thread.ToolCallWithThinking(id, fnCall.Name, string(fnCall.Args), "", part.ThoughtSignature)
 		}
 	}
 	return AcceptedResult()
