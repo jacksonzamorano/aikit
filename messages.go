@@ -161,7 +161,7 @@ func (p *MessagesAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	providerReq.Header.Add("Content-Type", "application/json")
 	providerReq.Header.Add("Accept", "text/event-stream")
 	if p.Config.APIVersion == "" {
-		providerReq.Header.Add("anthropic-version", "2023-06-11")
+		providerReq.Header.Add("anthropic-version", "2023-06-01")
 	} else {
 		providerReq.Header.Add("anthropic-version", p.Config.APIVersion)
 	}
