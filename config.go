@@ -1,13 +1,12 @@
 package aikit
 
 import (
-	"errors"
-	"net/http"
 	"net/url"
 	"strings"
 )
 
 type ProviderConfig struct {
+	Name string
 	// BaseURL is a base URL (e.g. "https://api.openai.com/v1") that will be
 	// combined with a provider's default endpoint path when Endpoint is empty.
 	BaseURL string
@@ -17,40 +16,28 @@ type ProviderConfig struct {
 
 	APIKey string
 
-	HTTPClient *http.Client
+	WebSearchToolName string
+	WebFetchToolName  string
 }
 
-func (c ProviderConfig) httpClient() *http.Client {
-	if c.HTTPClient != nil {
-		return c.HTTPClient
-	}
-	return &InferenceClient
-}
-
-func (c ProviderConfig) resolveEndpoint(defaultPath string) (string, error) {
+func (c ProviderConfig) resolveEndpoint(defaultPath string) string {
 	raw := strings.TrimSpace(c.Endpoint)
 	if raw == "" {
 		raw = strings.TrimSpace(c.BaseURL)
-		if raw == "" {
-			return "", errors.New("missing BaseURL/Endpoint")
-		}
-		if defaultPath == "" {
-			return "", errors.New("missing default path")
-		}
 		parsed, err := url.Parse(raw)
 		if err != nil {
-			return "", err
+			panic(err)
 		}
 		joined, err := url.JoinPath(parsed.String(), defaultPath)
 		if err != nil {
-			return "", err
+			panic(err)
 		}
-		return joined, nil
+		return joined
 	}
 
 	_, err := url.Parse(raw)
 	if err != nil {
-		return "", err
+		panic(err)
 	}
-	return raw, nil
+	return raw
 }

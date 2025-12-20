@@ -2,13 +2,22 @@ package aikit
 
 import "encoding/json"
 
+type MessagesErrorResponse struct {
+	Error MessagesError `json:"error"`
+}
+type MessagesError struct {
+	Message string `json:"message,omitempty"`
+	Type    string `json:"type,omitempty"`
+}
+
 type MessagesRequest struct {
 	Model     string            `json:"model"`
 	Messages  []MessagesMessage `json:"messages"`
 	Tools     []map[string]any  `json:"tools"`
 	System    string            `json:"system"`
 	MaxTokens int64             `json:"max_tokens"`
-	Thinking  MessagesThinking  `json:"thinking"`
+	Thinking  *MessagesThinking `json:"thinking"`
+	Stream    bool              `json:"stream"`
 }
 type MessagesMessage struct {
 	Role    string            `json:"role"`
@@ -36,7 +45,7 @@ type MessagesContent struct {
 	Text         string                    `json:"text,omitempty"`
 	Name         string                    `json:"name,omitempty"`
 	Id           string                    `json:"id,omitempty"`
-	Input        any                       `json:"input,omitempty"`
+	Input        json.RawMessage           `json:"input,omitempty"`
 	ToolUseId    string                    `json:"tool_use_id,omitempty"`
 	Content      any                       `json:"content,omitempty"`
 	CacheControl *MessagesCacheControl     `json:"cache_control,omitempty"`
@@ -61,14 +70,9 @@ type MessagesStreamEnvelope struct {
 	Type string `json:"type"`
 }
 
-type MessagesStreamError struct {
-	Message string `json:"message,omitempty"`
-	Type    string `json:"type,omitempty"`
-}
-
 type MessagesStreamErrorEvent struct {
-	Type  string               `json:"type"`
-	Error *MessagesStreamError `json:"error,omitempty"`
+	Type  string         `json:"type"`
+	Error *MessagesError `json:"error,omitempty"`
 }
 
 type MessagesStreamMessage struct {
@@ -97,29 +101,44 @@ type MessagesStreamMessageDelta struct {
 }
 
 type MessagesStreamContentBlock struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
-	Thinking  string          `json:"thinking,omitempty"`
-	Signature string          `json:"signature,omitempty"`
-	Data      string          `json:"data,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	ID        string          `json:"id,omitempty"`
-	Input     json.RawMessage `json:"input,omitempty"`
+	Type      string                           `json:"type"`
+	Text      string                           `json:"text,omitempty"`
+	Thinking  string                           `json:"thinking,omitempty"`
+	Signature string                           `json:"signature,omitempty"`
+	Data      string                           `json:"data,omitempty"`
+	Name      string                           `json:"name,omitempty"`
+	ID        string                           `json:"id,omitempty"`
+	ToolUseId string                           `json:"tool_use_id,omitempty"`
+	Input     json.RawMessage                  `json:"input,omitempty"`
+	Content   []MessagesStreamContentDeltaData `json:"content,omitempty"`
 }
 
 type MessagesStreamContentBlockStart struct {
 	Type         string                     `json:"type"`
 	Index        int                        `json:"index"`
 	ContentBlock MessagesStreamContentBlock `json:"content_block"`
+	Id           string                     `json:"id"`
+	Name         string                     `json:"name"`
 }
 
 type MessagesStreamContentDelta struct {
-	Type        string `json:"type"`
-	Text        string `json:"text,omitempty"`
-	Thinking    string `json:"thinking,omitempty"`
-	Signature   string `json:"signature,omitempty"`
-	Data        string `json:"data,omitempty"`
-	PartialJSON string `json:"partial_json,omitempty"`
+	Type  string                         `json:"type"`
+	Index int                            `json:"index"`
+	Delta MessagesStreamContentDeltaData `json:"delta"`
+}
+type MessagesStreamContentDeltaData struct {
+	Type        string                              `json:"type"`
+	Text        string                              `json:"text,omitempty"`
+	Thinking    string                              `json:"thinking,omitempty"`
+	Signature   string                              `json:"signature,omitempty"`
+	Data        string                              `json:"data,omitempty"`
+	PartialJSON string                              `json:"partial_json,omitempty"`
+	Title       string                              `json:"title,omitempty"`
+	URL         string                              `json:"url,omitempty"`
+	Citation    *MessagesStreamContentDeltaCitation `json:"citation,omitempty"`
+}
+type MessagesStreamContentDeltaCitation struct {
+	Url string `json:"url"`
 }
 
 type MessagesStreamContentBlockDelta struct {
@@ -143,4 +162,12 @@ type MessagesBuilderBlock struct {
 	ToolId    string `json:"id,omitempty"`
 	ToolName  string `json:"name,omitempty"`
 	ToolInput string `json:"input,omitempty"`
+}
+
+type MessagesWebSearchQuery struct {
+	Query string `json:"query"`
+}
+
+type MessagesWebFetchQuery struct {
+	URL string `json:"url"`
 }

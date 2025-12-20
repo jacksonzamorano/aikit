@@ -2,6 +2,29 @@ package aikit
 
 import "encoding/json"
 
+type ResponsesRequest struct {
+	Model              string              `json:"model"`
+	Inputs             []ResponsesInput    `json:"input"`
+	Tools              []ResponsesTool     `json:"tools,omitempty"`
+	Stream             bool                `json:"stream,omitempty"`
+	Store              bool                `json:"store,omitempty"`
+	Include            []string            `json:"include,omitempty"`
+	Instructions       string              `json:"instructions,omitempty"`
+	PreviousResponseID string              `json:"previous_response_id,omitempty"`
+	Reasoning          *ResponsesReasoning `json:"reasoning,omitempty"`
+}
+
+type ResponsesReasoning struct {
+	Effort  string `json:"effort,omitempty"`
+	Summary string `json:"summary,omitempty"`
+}
+type ResponsesTool struct {
+	Type        string          `json:"type,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Parameters  *ToolJsonSchema `json:"parameters,omitempty"`
+	Description string          `json:"description,omitempty"`
+}
+
 type ResponsesResult struct {
 	Id     string            `json:"id"`
 	Output []ResponsesOutput `json:"output"`
@@ -9,25 +32,24 @@ type ResponsesResult struct {
 	Error  *any              `json:"error"`
 }
 type ResponsesUsage struct {
-	InputTokens  int64               `json:"input_tokens"`
-	InputDetails ResponsesInputUsage `json:"input_tokens_details"`
-	OutputTokens int64               `json:"output_tokens"`
+	InputTokens      int64               `json:"input_tokens"`
+	PromptTokens     int64               `json:"prompt_tokens"`
+	InputDetails     ResponsesInputUsage `json:"input_tokens_details"`
+	OutputTokens     int64               `json:"output_tokens"`
+	CompletionTokens int64               `json:"completion_tokens"`
 }
 type ResponsesInputUsage struct {
 	CachedTokens int64 `json:"cached_tokens"`
 }
 type ResponsesOutput struct {
-	Action    *ResponsesOutputAction `json:"action,omitempty"`
-	Role      string                 `json:"role,omitempty"`
-	Content   []ResponsesContent     `json:"content,omitempty"`
-	Type      string                 `json:"type,omitempty"`
-	Id        string                 `json:"id,omitempty"`
-	Name      string                 `json:"name,omitempty"`
-	CallId    string                 `json:"call_id,omitempty"`
-	Arguments json.RawMessage        `json:"arguments,omitempty"`
-}
-type ResponsesOutputAction struct {
-	Type string `json:"type,omitempty"`
+	Action    *ResponsesWebSearchAction `json:"action,omitempty"`
+	Role      string                    `json:"role,omitempty"`
+	Content   []ResponsesContent        `json:"content,omitempty"`
+	Type      string                    `json:"type,omitempty"`
+	Id        string                    `json:"id,omitempty"`
+	Name      string                    `json:"name,omitempty"`
+	CallId    string                    `json:"call_id,omitempty"`
+	Arguments string                    `json:"arguments,omitempty"`
 }
 type ResponsesOutputToolCall struct {
 	Id        string         `json:"id,omitempty"`
@@ -45,9 +67,12 @@ type ResponsesContentAnnotation struct {
 }
 
 type ResponsesInput struct {
-	Type    string             `json:"type,omitempty"`
-	Role    string             `json:"role"`
-	Content []ResponsesContent `json:"content"`
+	Id         string             `json:"id,omitempty"`
+	Type       string             `json:"type,omitempty"`
+	Role       string             `json:"role,omitempty"`
+	Content    []ResponsesContent `json:"content,omitempty"`
+	ToolCallId string             `json:"call_id,omitempty"`
+	Output     any                `json:"output,omitempty"`
 }
 type ResponsesInputMessage struct {
 	Role    string             `json:"role"`
@@ -71,12 +96,14 @@ type ResponsesStreamError struct {
 type ResponsesStreamEvent struct {
 	Type string `json:"type"`
 
-	Delta   string             `json:"delta,omitempty"`
-	CallID  string             `json:"call_id,omitempty"`
-	Item    *ResponsesOutput   `json:"item,omitempty"`
-	ItemId  string             `json:"item_id,omitempty"`
-	Summary []ResponsesSummary `json:"summary,omitempty"`
-	Part    ResponsesPartEvent `json:"part,omitempty"`
+	Annotation ResponsesContentAnnotation `json:"annotation"`
+	Delta      string                     `json:"delta,omitempty"`
+	CallID     string                     `json:"call_id,omitempty"`
+	Item       *ResponsesOutput           `json:"item,omitempty"`
+	ItemId     string                     `json:"item_id,omitempty"`
+	Summary    []ResponsesSummary         `json:"summary,omitempty"`
+	Part       ResponsesPartEvent         `json:"part"`
+	Text       string                     `json:"text,omitempty"`
 
 	ResponseID string           `json:"response_id,omitempty"`
 	ID         string           `json:"id,omitempty"`
@@ -85,6 +112,12 @@ type ResponsesStreamEvent struct {
 	Error *ResponsesStreamError `json:"error,omitempty"`
 
 	Raw json.RawMessage `json:"-"`
+}
+
+type ResponsesWebSearchAction struct {
+	Type  string `json:"type"`
+	Query string `json:"query"`
+	Url   string `json:"url"`
 }
 
 type ResponsesPartEvent struct {
