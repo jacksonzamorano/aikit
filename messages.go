@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 )
@@ -279,6 +280,18 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 		case "input_json_delta":
 			if p.lastToolCall.IsServer {
 				p.lastToolCall.Buffer += cbd.Delta.PartialJSON
+				switch p.lastToolCall.ToolName {
+				case "web_search":
+					var output MessagesWebSearchQuery
+					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err == nil {
+						thread.WebSearchQuery(p.lastToolCall.ID, output.Query)
+					}
+				case "web_fetch":
+					var output MessagesWebFetchQuery
+					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err == nil {
+						thread.ViewWebpageUrl(p.lastToolCall.ID, output.URL)
+					}
+				}
 			} else {
 				thread.ToolCall(p.lastToolCall.ID, "", "")
 			}
@@ -287,25 +300,6 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 		var cbst MessagesStreamContentBlockStop
 		if err := json.Unmarshal(data, &cbst); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
-		}
-		switch cbst.Type {
-		case "server_tool_use":
-			if p.lastToolCall.IsServer {
-				switch p.lastToolCall.ToolName {
-				case "web_search":
-					var output MessagesWebSearchQuery
-					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
-						return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
-					}
-					thread.WebSearchQuery(p.lastToolCall.ID, output.Query)
-				case "web_fetch":
-					var output MessagesWebFetchQuery
-					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err != nil {
-						return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
-					}
-					thread.ViewWebpageUrl(p.lastToolCall.ID, output.URL)
-				}
-			}
 		}
 		thread.Complete(p.blockId(thread, cbst.Index))
 	case "message_stop":
