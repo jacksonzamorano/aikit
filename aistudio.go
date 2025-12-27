@@ -34,8 +34,8 @@ func (p *AIStudioAPIRequest) InitSession(thread *Thread) {
 
 	p.request = AIStudioRequest{
 		Contents: []AIStudioContent{},
-		Tools: AIStudioTools{
-			FunctionDeclarations: tools,
+		Tools: []AIStudioTools{
+			{FunctionDeclarations: tools},
 		},
 	}
 }
@@ -77,14 +77,21 @@ func (p *AIStudioAPIRequest) Update(block *ThreadBlock) {
 			},
 		})
 		if block.ToolResult != nil {
+			// Google's API expects the response to be a JSON object (Struct).
+			// If the output is already a valid JSON object, use it directly.
+			// Otherwise, wrap it in an object.
+			response := []byte(block.ToolResult.Output)
+			if !json.Valid(response) || response[0] != '{' {
+				response, _ = json.Marshal(map[string]string{"output": block.ToolResult.Output})
+			}
 			p.request.Contents = append(p.request.Contents, AIStudioContent{
-				Role: "model",
+				Role: "user",
 				Parts: []AIStudioPart{
 					{
 						FunctionResult: &AIStudioFunctionResult{
 							Id:       block.ToolResult.ToolCallID,
 							Name:     block.ToolCall.Name,
-							Response: []byte(block.ToolResult.Output),
+							Response: response,
 						},
 					},
 				},
@@ -104,6 +111,7 @@ func (p AIStudioAPIRequest) MakeRequest(thread *Thread) *http.Request {
 
 	body, _ := json.Marshal(p.request)
 	providerReq, _ := http.NewRequest("POST", u.String(), bytes.NewReader(body))
+	providerReq.Header.Set("Content-Type", "application/json")
 	return providerReq
 }
 

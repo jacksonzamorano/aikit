@@ -3,9 +3,9 @@ package aikit
 import "encoding/json"
 
 type AIStudioRequest struct {
-	SystemInstruction *AIStudioContent  `json:"system_instruction,omitempty"`
+	SystemInstruction *AIStudioContent  `json:"systemInstruction,omitempty"`
 	Contents          []AIStudioContent `json:"contents"`
-	Tools             AIStudioTools     `json:"tools"`
+	Tools             []AIStudioTools   `json:"tools"`
 }
 type AIStudioTools struct {
 	FunctionDeclarations []map[string]any `json:"functionDeclarations,omitempty"`
