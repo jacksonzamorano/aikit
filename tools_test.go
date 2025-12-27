@@ -286,6 +286,218 @@ func TestMessagesOnChunkToolCall(t *testing.T) {
 	}
 }
 
+// TestCompletionsRequestSerialization tests that the Completions API request
+// properly serializes tool definitions with parameters.
+func TestCompletionsRequestSerialization(t *testing.T) {
+	provider := GroqProvider("test-key")
+	session := provider.Session()
+	session.Thread.Model = "llama-3"
+	session.Thread.Tools = map[string]ToolDefinition{
+		"search": {
+			Description: "Search for information",
+			Parameters: &ToolJsonSchema{
+				Type: "object",
+				Properties: &map[string]*ToolJsonSchema{
+					"query": {
+						Type:        "string",
+						Description: "The search query",
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Max results",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+	}
+
+	req := session.Provider.(*CompletionsAPIRequest)
+	req.InitSession(session.Thread)
+
+	// Marshal the request to see the actual JSON
+	data, err := json.MarshalIndent(req.request, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal request: %v", err)
+	}
+
+	// Parse the JSON to verify structure
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("Failed to unmarshal request: %v", err)
+	}
+
+	tools, ok := parsed["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("Tools not properly serialized: %s", string(data))
+	}
+
+	tool := tools[0].(map[string]any)
+	function, ok := tool["function"].(map[string]any)
+	if !ok {
+		t.Fatalf("Function not properly serialized in tool: %v", tool)
+	}
+
+	params, ok := function["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("Parameters not properly serialized. Got type %T, full JSON:\n%s", function["parameters"], string(data))
+	}
+
+	if params["type"] != "object" {
+		t.Errorf("Expected parameters type 'object', got %v", params["type"])
+	}
+
+	props, ok := params["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("Properties not serialized. Full JSON:\n%s", string(data))
+	}
+
+	if len(props) != 2 {
+		t.Errorf("Expected 2 properties, got %d. Full JSON:\n%s", len(props), string(data))
+	}
+
+	// Check required array
+	required, ok := params["required"].([]any)
+	if !ok || len(required) != 1 {
+		t.Errorf("Required not properly serialized. Full JSON:\n%s", string(data))
+	}
+}
+
+// TestMessagesRequestSerialization tests that the Messages API request
+// properly serializes tool definitions with parameters.
+func TestMessagesRequestSerialization(t *testing.T) {
+	provider := AnthropicProvider("test-key")
+	session := provider.Session()
+	session.Thread.Model = "claude-3-opus"
+	session.Thread.Tools = map[string]ToolDefinition{
+		"search": {
+			Description: "Search for information",
+			Parameters: &ToolJsonSchema{
+				Type: "object",
+				Properties: &map[string]*ToolJsonSchema{
+					"query": {
+						Type:        "string",
+						Description: "The search query",
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Max results",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+	}
+
+	req := session.Provider.(*MessagesAPIRequest)
+	req.InitSession(session.Thread)
+
+	// Marshal the request to see the actual JSON
+	data, err := json.MarshalIndent(req.request, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal request: %v", err)
+	}
+
+	// Parse the JSON to verify structure
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("Failed to unmarshal request: %v", err)
+	}
+
+	tools, ok := parsed["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("Tools not properly serialized: %s", string(data))
+	}
+
+	tool := tools[0].(map[string]any)
+
+	// Messages API uses "input_schema" instead of "parameters"
+	params, ok := tool["input_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("input_schema not properly serialized. Got type %T, full JSON:\n%s", tool["input_schema"], string(data))
+	}
+
+	if params["type"] != "object" {
+		t.Errorf("Expected parameters type 'object', got %v", params["type"])
+	}
+
+	props, ok := params["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("Properties not serialized. Full JSON:\n%s", string(data))
+	}
+
+	if len(props) != 2 {
+		t.Errorf("Expected 2 properties, got %d. Full JSON:\n%s", len(props), string(data))
+	}
+}
+
+// TestResponsesRequestSerialization tests that the Responses API request
+// properly serializes tool definitions with parameters.
+func TestResponsesRequestSerialization(t *testing.T) {
+	provider := OpenAIProvider("test-key")
+	session := provider.Session()
+	session.Thread.Model = "gpt-4"
+	session.Thread.Tools = map[string]ToolDefinition{
+		"search": {
+			Description: "Search for information",
+			Parameters: &ToolJsonSchema{
+				Type: "object",
+				Properties: &map[string]*ToolJsonSchema{
+					"query": {
+						Type:        "string",
+						Description: "The search query",
+					},
+					"limit": {
+						Type:        "integer",
+						Description: "Max results",
+					},
+				},
+				Required: []string{"query"},
+			},
+		},
+	}
+
+	req := session.Provider.(*ResponsesAPIRequest)
+	req.InitSession(session.Thread)
+
+	// Marshal the request to see the actual JSON
+	data, err := json.MarshalIndent(req.Request, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal request: %v", err)
+	}
+
+	// Parse the JSON to verify structure
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("Failed to unmarshal request: %v", err)
+	}
+
+	tools, ok := parsed["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("Tools not properly serialized: %s", string(data))
+	}
+
+	tool := tools[0].(map[string]any)
+
+	params, ok := tool["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("parameters not properly serialized. Got type %T, full JSON:\n%s", tool["parameters"], string(data))
+	}
+
+	if params["type"] != "object" {
+		t.Errorf("Expected parameters type 'object', got %v", params["type"])
+	}
+
+	props, ok := params["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("Properties not serialized. Full JSON:\n%s", string(data))
+	}
+
+	if len(props) != 2 {
+		t.Errorf("Expected 2 properties, got %d. Full JSON:\n%s", len(props), string(data))
+	}
+}
+
 // TestCompletionsOnChunkToolCall tests that CompletionsAPIRequest.OnChunk properly handles
 // tool call streaming events and accumulates arguments.
 func TestCompletionsOnChunkToolCall(t *testing.T) {
