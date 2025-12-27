@@ -91,17 +91,7 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 			case InferenceBlockToolCall:
 				block := s.Thread.Blocks[lastBlock]
 				res := s.Thread.HandleToolFunction(block.ToolCall.Name, block.ToolCall.Arguments)
-				resBytes, err := json.Marshal(res)
-				if err != nil {
-					s.Thread.Success = false
-					s.Thread.Error = &AIError{
-						Category: AIErrorCategoryToolResultError,
-						Message:  err.Error(),
-						Provider: s.Provider.Name(),
-					}
-					return s.Thread
-				}
-				s.Thread.ToolResult(block.ToolCall, string(resBytes))
+				s.Thread.ToolResult(block.ToolCall, res)
 			}
 			s.Provider.Update(s.Thread.Blocks[lastBlock])
 			lastBlock++

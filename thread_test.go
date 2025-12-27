@@ -40,16 +40,12 @@ func MakeRequest(t *testing.T, provider aikit.ProviderConfig, modelname string, 
 		session.Thread.ReasoningEffort = *reasoning
 	}
 	session.Thread.CoalesceTextBlocks = true
-	session.Thread.HandleToolFunction = func(name string, args string) any {
+	session.Thread.HandleToolFunction = func(name string, args string) string {
 		switch name {
 		case "get_time":
-			return toolResponse{
-				Time: time.Now().Format(time.RFC3339),
-			}
+			return time.Now().Format(time.RFC3339)
 		default:
-			return toolResponse{
-				Error: fmt.Sprintf("Unknown tool: %s", name),
-			}
+			return fmt.Sprintf("Error: Unknown tool: %s", name)
 		}
 	}
 

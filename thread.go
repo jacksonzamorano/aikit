@@ -5,13 +5,13 @@ import (
 )
 
 type Thread struct {
-	ReasoningEffort    string                             `json:"reasoning_effort"`
-	Tools              map[string]ToolDefinition          `json:"tools"`
-	MaxWebSearches     int                                `json:"max_web_searches"`
-	WebFetchEnabled    bool                               `json:"web_fetch_enabled"`
-	HandleToolFunction func(name string, args string) any `json:"-"`
-	UpdateOnFinalize   bool                               `json:"update_on_finalize"`
-	CoalesceTextBlocks bool                               `json:"coalesce_text_blocks"`
+	ReasoningEffort    string                                `json:"reasoning_effort"`
+	Tools              map[string]ToolDefinition             `json:"tools"`
+	MaxWebSearches     int                                   `json:"max_web_searches"`
+	WebFetchEnabled    bool                                  `json:"web_fetch_enabled"`
+	HandleToolFunction func(name string, args string) string `json:"-"`
+	UpdateOnFinalize   bool                                  `json:"update_on_finalize"`
+	CoalesceTextBlocks bool                                  `json:"coalesce_text_blocks"`
 
 	Success bool        `json:"success"`
 	Error   error       `json:"error,omitempty"`
