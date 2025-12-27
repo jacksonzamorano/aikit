@@ -228,7 +228,13 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 		case "redacted_thinking":
 			thread.EncryptedThinking(cbs.ContentBlock.Data)
 		case "tool_use":
-			thread.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, string(cbs.ContentBlock.Input))
+			// In streaming mode, input comes via input_json_delta events, so we start with empty arguments.
+			// Only use the initial input if it's not empty (non-streaming or complete input).
+			initialArgs := ""
+			if len(cbs.ContentBlock.Input) > 0 && string(cbs.ContentBlock.Input) != "{}" {
+				initialArgs = string(cbs.ContentBlock.Input)
+			}
+			thread.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, initialArgs)
 			p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: false}
 		case "server_tool_use":
 			switch cbs.ContentBlock.Name {
@@ -292,7 +298,7 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 					}
 				}
 			} else {
-				thread.ToolCall(p.lastToolCall.ID, "", "")
+				thread.ToolCall(p.lastToolCall.ID, "", cbd.Delta.PartialJSON)
 			}
 		}
 	case "content_block_stop":

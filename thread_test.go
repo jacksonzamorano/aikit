@@ -19,20 +19,30 @@ type toolResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
+type getTimeArgs struct {
+	Timezone string `json:"timezone"`
+}
+
 func MakeRequest(t *testing.T, provider aikit.ProviderConfig, modelname string, reasoning *string) *aikit.Session {
 	t.Helper()
 
 	session := provider.Session()
 
 	session.Thread.Model = modelname
-	session.Thread.System("You are a helpful assistant. You will always request the current time using the get_time tool and use it in your response.")
+	session.Thread.System("You are a helpful assistant. You will always request the current time using the get_time tool with the timezone parameter set to 'UTC', and use the result in your response.")
 	session.Thread.Input("What date is exactly 365 days from today, and what day of the week will it be?")
 	session.Thread.Tools = map[string]aikit.ToolDefinition{
 		"get_time": {
-			Description: "Get the current time in ISO 8601 format.",
+			Description: "Get the current time in ISO 8601 format for a specific timezone.",
 			Parameters: &aikit.ToolJsonSchema{
-				Type:       "object",
-				Properties: &map[string]*aikit.ToolJsonSchema{},
+				Type: "object",
+				Properties: &map[string]*aikit.ToolJsonSchema{
+					"timezone": {
+						Type:        "string",
+						Description: "The timezone to get the time for (e.g., 'UTC', 'America/New_York', 'Europe/London').",
+					},
+				},
+				Required: []string{"timezone"},
 			},
 		},
 	}
@@ -43,7 +53,19 @@ func MakeRequest(t *testing.T, provider aikit.ProviderConfig, modelname string, 
 	session.Thread.HandleToolFunction = func(name string, args string) string {
 		switch name {
 		case "get_time":
-			return time.Now().Format(time.RFC3339)
+			var parsedArgs getTimeArgs
+			if err := json.Unmarshal([]byte(args), &parsedArgs); err != nil {
+				return fmt.Sprintf("Error: Invalid arguments: %s", err.Error())
+			}
+			if parsedArgs.Timezone == "" {
+				return "Error: timezone parameter is required"
+			}
+			loc, err := time.LoadLocation(parsedArgs.Timezone)
+			if err != nil {
+				// Fall back to UTC if timezone is invalid but provided
+				loc = time.UTC
+			}
+			return time.Now().In(loc).Format(time.RFC3339)
 		default:
 			return fmt.Sprintf("Error: Unknown tool: %s", name)
 		}
@@ -108,6 +130,17 @@ func VerifyResults(t *testing.T, name string, results string, result aikit.Threa
 		}
 		if b.AliasId != "" && b.AliasFor == nil {
 			t.Errorf("Block %s has an AliasId but is not an alias.", b.ID)
+		}
+		// Verify tool calls have valid arguments with required parameters
+		if b.Type == aikit.InferenceBlockToolCall && b.ToolCall != nil {
+			if b.ToolCall.Name == "get_time" {
+				var args getTimeArgs
+				if err := json.Unmarshal([]byte(b.ToolCall.Arguments), &args); err != nil {
+					t.Errorf("Tool call %s has invalid JSON arguments: %s (raw: %q)", b.ID, err.Error(), b.ToolCall.Arguments)
+				} else if args.Timezone == "" {
+					t.Errorf("Tool call %s missing required 'timezone' parameter (raw: %q)", b.ID, b.ToolCall.Arguments)
+				}
+			}
 		}
 	}
 }

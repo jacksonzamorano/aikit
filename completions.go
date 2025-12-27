@@ -130,7 +130,9 @@ func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult
 				p.lastTool = id
 			}
 
-			thread.ToolCall(id, tc.Function.Name, tc.Function.Arguments)
+			if tc.Function != nil {
+				thread.ToolCall(id, tc.Function.Name, tc.Function.Arguments)
+			}
 		}
 		if choice.FinishReason != nil {
 			thread.Complete(id)
