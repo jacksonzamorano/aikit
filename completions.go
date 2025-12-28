@@ -62,6 +62,40 @@ func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {
 				{Type: "text", Text: block.Text},
 			},
 		})
+	case InferenceBlockInputImage:
+		if block.Image == nil {
+			return
+		}
+		imgBlock := CompletionImageUrlBlock{
+			Type: "image_url",
+			ImageUrl: CompletionImageUrlDetail{
+				Url: block.Image.GetDataURL(),
+			},
+		}
+		// Append to last user message if exists, else create new
+		if len(p.request.Messages) > 0 {
+			lastIdx := len(p.request.Messages) - 1
+			if p.request.Messages[lastIdx].Role == "user" {
+				// Content is []CompletionTextBlock or could be []any
+				switch c := p.request.Messages[lastIdx].Content.(type) {
+				case []CompletionTextBlock:
+					// Convert to []any and append image
+					arr := make([]any, len(c))
+					for i, tb := range c {
+						arr[i] = tb
+					}
+					arr = append(arr, imgBlock)
+					p.request.Messages[lastIdx].Content = arr
+				case []any:
+					p.request.Messages[lastIdx].Content = append(c, imgBlock)
+				}
+				return
+			}
+		}
+		p.request.Messages = append(p.request.Messages, CompletionsMessage{
+			Role:    "user",
+			Content: []any{imgBlock},
+		})
 	case InferenceBlockText:
 		p.request.Messages = append(p.request.Messages, CompletionsMessage{
 			Role: "assistant",

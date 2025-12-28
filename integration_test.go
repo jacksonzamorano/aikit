@@ -163,6 +163,58 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 }
 
 // =============================================================================
+// SHARED VALIDATION RUNNER - IMAGE INPUT
+// =============================================================================
+
+func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
+	t.Helper()
+
+	// Read test image
+	imageData, err := os.ReadFile("test_image.jpg")
+	if err != nil {
+		t.Fatalf("Failed to read test image: %v", err)
+	}
+
+	all := ""
+	var lastHash string
+
+	session := cfg.Provider.Session()
+	session.Thread.Model = cfg.Model
+	session.Thread.CoalesceTextBlocks = true
+	session.Thread.System("You are a helpful assistant that identifies images.")
+	session.Thread.InputImage(imageData, "image/jpeg")
+	session.Thread.Input("What famous video is this frame from?")
+	if cfg.ReasoningEffort != nil {
+		session.Thread.ReasoningEffort = *cfg.ReasoningEffort
+	}
+	session.Debug = testDebugEnabled
+
+	result := session.Stream(func(result *aikit.Thread) {
+		all += snapshotResult(*result)
+
+		// Streaming hash uniqueness check
+		bytes, _ := json.Marshal(result.Blocks)
+		hash := sha256.Sum256(bytes)
+		currentHash := hex.EncodeToString(hash[:])
+		if currentHash == lastHash && lastHash != "" {
+			t.Errorf("Streaming callback received duplicate data")
+		}
+		lastHash = currentHash
+	})
+	all += snapshotResult(*result)
+
+	// Write test run data
+	writeTestRun(cfg.TestName+"_image", all)
+
+	// Run all validations
+	validateBasicResults(t, result)
+	validateBlockIntegrity(t, result)
+	validateBlockIDUniqueness(t, result)
+	validateImageInputResponse(t, result)
+	validateReasoningBlocks(t, cfg.ReasoningEffort, result)
+}
+
+// =============================================================================
 // VALIDATION FUNCTIONS
 // =============================================================================
 
@@ -185,7 +237,7 @@ func validateBlockIntegrity(t *testing.T, result *aikit.Thread) {
 		if !b.Complete {
 			t.Errorf("Block %s of type %s not marked complete.", b.ID, b.Type)
 		}
-		if b.ID == "" && b.Type != aikit.InferenceBlockInput && b.Type != aikit.InferenceBlockSystem {
+		if b.ID == "" && b.Type != aikit.InferenceBlockInput && b.Type != aikit.InferenceBlockSystem && b.Type != aikit.InferenceBlockInputImage {
 			t.Errorf("Block of type %s has no ID.", b.Type)
 		}
 		if b.AliasFor != nil && b.AliasId == "" {
@@ -298,6 +350,20 @@ func validateReasoningBlocks(t *testing.T, reasoningEffort *string, result *aiki
 	}
 }
 
+func validateImageInputResponse(t *testing.T, result *aikit.Thread) {
+	t.Helper()
+	hasTextResponse := false
+	for _, b := range result.Blocks {
+		if b.Type == aikit.InferenceBlockText && len(b.Text) > 0 {
+			hasTextResponse = true
+			break
+		}
+	}
+	if !hasTextResponse {
+		t.Error("No text response found for image input")
+	}
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -346,6 +412,15 @@ func TestIntegration_Anthropic_WebSearch(t *testing.T) {
 	})
 }
 
+func TestIntegration_Anthropic_ImageInput(t *testing.T) {
+	runImageInputValidation(t, integrationTestConfig{
+		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model:           "claude-haiku-4-5-20251001",
+		ReasoningEffort: &anthropicReasoningEffort,
+		TestName:        "anthropic",
+	})
+}
+
 // =============================================================================
 // OPENAI (RESPONSES API) INTEGRATION TESTS
 // =============================================================================
@@ -363,6 +438,15 @@ func TestIntegration_OpenAI_ToolCall(t *testing.T) {
 
 func TestIntegration_OpenAI_WebSearch(t *testing.T) {
 	runWebSearchValidation(t, integrationTestConfig{
+		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model:           "gpt-5-nano",
+		ReasoningEffort: &openaiReasoningEffort,
+		TestName:        "openai",
+	})
+}
+
+func TestIntegration_OpenAI_ImageInput(t *testing.T) {
+	runImageInputValidation(t, integrationTestConfig{
 		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
 		Model:           "gpt-5-nano",
 		ReasoningEffort: &openaiReasoningEffort,
@@ -418,6 +502,14 @@ func TestIntegration_Fireworks_ToolCall(t *testing.T) {
 
 func TestIntegration_XAI_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
+		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
+		Model:    "grok-4-1-fast-reasoning-latest",
+		TestName: "xai",
+	})
+}
+
+func TestIntegration_XAI_ImageInput(t *testing.T) {
+	runImageInputValidation(t, integrationTestConfig{
 		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
 		Model:    "grok-4-1-fast-reasoning-latest",
 		TestName: "xai",

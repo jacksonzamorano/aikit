@@ -98,6 +98,33 @@ func (p *MessagesAPIRequest) Update(block *ThreadBlock) {
 				},
 			},
 		})
+	case InferenceBlockInputImage:
+		if block.Image == nil {
+			return
+		}
+		imgContent := MessagesContent{
+			Type: "image",
+			Source: &MessagesImageSource{
+				Type:      "base64",
+				MediaType: block.Image.MediaType,
+				Data:      block.Image.GetBase64(),
+			},
+		}
+		// Append to last user message if exists, else create new
+		if len(p.request.Messages) > 0 {
+			lastIdx := len(p.request.Messages) - 1
+			if p.request.Messages[lastIdx].Role == "user" {
+				p.request.Messages[lastIdx].Content = append(
+					p.request.Messages[lastIdx].Content,
+					imgContent,
+				)
+				return
+			}
+		}
+		p.request.Messages = append(p.request.Messages, MessagesMessage{
+			Role:    "user",
+			Content: []MessagesContent{imgContent},
+		})
 	case InferenceBlockText:
 		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "assistant",

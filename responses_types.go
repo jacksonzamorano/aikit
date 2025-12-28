@@ -58,7 +58,8 @@ type ResponsesOutputToolCall struct {
 }
 type ResponsesContent struct {
 	Typ         string                       `json:"type"`
-	Text        string                       `json:"text"`
+	Text        string                       `json:"text,omitempty"`
+	ImageUrl    string                       `json:"image_url,omitempty"`
 	Annotations []ResponsesContentAnnotation `json:"annotations,omitempty"`
 }
 type ResponsesContentAnnotation struct {

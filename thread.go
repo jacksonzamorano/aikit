@@ -1,6 +1,7 @@
 package aikit
 
 import (
+	"encoding/base64"
 	"fmt"
 )
 
@@ -95,6 +96,29 @@ func (s *Thread) System(text string) {
 func (s *Thread) Input(text string) {
 	b := s.create("", InferenceBlockInput)
 	b.Text = text
+	b.Complete = true
+}
+
+// InputImage adds an image to the thread using raw bytes.
+// The bytes are immediately encoded to base64 and stored.
+// mediaType should be a valid MIME type (e.g., "image/jpeg", "image/png", "image/gif", "image/webp").
+func (s *Thread) InputImage(data []byte, mediaType string) {
+	b := s.create("", InferenceBlockInputImage)
+	b.Image = &ThreadImage{
+		Base64:    base64.StdEncoding.EncodeToString(data),
+		MediaType: mediaType,
+	}
+	b.Complete = true
+}
+
+// InputImageBase64 adds an image to the thread using a pre-encoded base64 string.
+// mediaType should be a valid MIME type (e.g., "image/jpeg", "image/png", "image/gif", "image/webp").
+func (s *Thread) InputImageBase64(base64Data string, mediaType string) {
+	b := s.create("", InferenceBlockInputImage)
+	b.Image = &ThreadImage{
+		Base64:    base64Data,
+		MediaType: mediaType,
+	}
 	b.Complete = true
 }
 func (s *Thread) Text(id string, text string) {

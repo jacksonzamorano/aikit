@@ -29,6 +29,17 @@ type CompletionTextBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
 }
+
+// CompletionImageUrlBlock represents an image content block for Chat Completions API.
+type CompletionImageUrlBlock struct {
+	Type     string                   `json:"type"` // "image_url"
+	ImageUrl CompletionImageUrlDetail `json:"image_url"`
+}
+
+// CompletionImageUrlDetail contains the image URL details.
+type CompletionImageUrlDetail struct {
+	Url string `json:"url"` // data URL or https URL
+}
 type CompletionsUsage struct {
 	PromptTokens       int64                         `json:"prompt_tokens"`
 	CompletionTokens   int64                         `json:"completion_tokens"`

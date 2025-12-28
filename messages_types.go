@@ -26,6 +26,13 @@ type MessagesMessage struct {
 type MessagesCacheControl struct {
 	Type string `json:"type"`
 }
+
+// MessagesImageSource represents an image source for the Anthropic Messages API.
+type MessagesImageSource struct {
+	Type      string `json:"type"`       // "base64"
+	MediaType string `json:"media_type"` // e.g., "image/jpeg"
+	Data      string `json:"data"`       // base64-encoded data
+}
 type MessagesThinking struct {
 	BudgetTokens int64  `json:"budget_tokens"`
 	Type         string `json:"type"`
@@ -48,6 +55,7 @@ type MessagesContent struct {
 	Input        json.RawMessage           `json:"input,omitempty"`
 	ToolUseId    string                    `json:"tool_use_id,omitempty"`
 	Content      any                       `json:"content,omitempty"`
+	Source       *MessagesImageSource      `json:"source,omitempty"`
 	CacheControl *MessagesCacheControl     `json:"cache_control,omitempty"`
 	Citations    []MessagesContentCitation `json:"citations,omitempty"`
 }

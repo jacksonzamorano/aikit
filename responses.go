@@ -71,6 +71,29 @@ func (p *ResponsesAPIRequest) Update(block *ThreadBlock) {
 				},
 			},
 		})
+	case InferenceBlockInputImage:
+		if block.Image == nil {
+			return
+		}
+		imgContent := ResponsesContent{
+			Typ:      "input_image",
+			ImageUrl: block.Image.GetDataURL(),
+		}
+		// Append to last user input if exists, else create new
+		if len(p.Request.Inputs) > 0 {
+			lastIdx := len(p.Request.Inputs) - 1
+			if p.Request.Inputs[lastIdx].Role == "user" {
+				p.Request.Inputs[lastIdx].Content = append(
+					p.Request.Inputs[lastIdx].Content,
+					imgContent,
+				)
+				return
+			}
+		}
+		p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{
+			Role:    "user",
+			Content: []ResponsesContent{imgContent},
+		})
 	case InferenceBlockSystem:
 		p.Request.Instructions = block.Text
 	case InferenceBlockToolCall:
