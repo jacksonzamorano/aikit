@@ -79,7 +79,7 @@ func (s *Thread) Complete(id string) {
 }
 func (s *Thread) getType(id string, ofType ThreadBlockType) *ThreadBlock {
 	blockIdx := len(s.Blocks) - 1
-	for blockIdx > 0 {
+	for blockIdx >= 0 {
 		if s.Blocks[blockIdx].Type == ofType && s.Blocks[blockIdx].ID == id {
 			return s.Blocks[blockIdx]
 		}
@@ -98,6 +98,9 @@ func (s *Thread) Input(text string) {
 	b.Complete = true
 }
 func (s *Thread) Text(id string, text string) {
+	if text == "" {
+		return
+	}
 	b := s.findOrCreateIDBlock(id, InferenceBlockText)
 	if b == nil {
 		b = s.create(s.NewBlockId(InferenceBlockText), InferenceBlockText)
@@ -133,6 +136,9 @@ func (s *Thread) Cite(id string, citation string) {
 	s.Updated = true
 }
 func (s *Thread) Thinking(id string, text string) {
+	if text == "" {
+		return
+	}
 	b := s.findOrCreateIDBlock(id, InferenceBlockThinking)
 	if b == nil {
 		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
@@ -141,6 +147,9 @@ func (s *Thread) Thinking(id string, text string) {
 	s.Updated = true
 }
 func (s *Thread) ThinkingWithSignature(id string, thinking string, signature string) {
+	if thinking == "" && signature == "" {
+		return
+	}
 	b := s.findOrCreateIDBlock(id, InferenceBlockThinking)
 	if b == nil {
 		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
@@ -150,6 +159,9 @@ func (s *Thread) ThinkingWithSignature(id string, thinking string, signature str
 	s.Updated = true
 }
 func (s *Thread) ThinkingSignature(id string, signature string) {
+	if signature == "" {
+		return
+	}
 	b := s.findOrCreateIDBlock(id, InferenceBlockThinking)
 	if b == nil {
 		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
@@ -171,17 +183,23 @@ func (s *Thread) ToolCall(id string, name string, arguments string) {
 	if b == nil {
 		b = s.create(id, InferenceBlockToolCall)
 		s.incompleteToolCalls++
-	}
-	if b.ToolCall == nil {
 		b.ToolCall = &ThreadToolCall{
 			ID:        id,
 			Name:      name,
 			Arguments: arguments,
 		}
-	} else {
+		s.Updated = true
+	} else if b.ToolCall == nil {
+		b.ToolCall = &ThreadToolCall{
+			ID:        id,
+			Name:      name,
+			Arguments: arguments,
+		}
+		s.Updated = true
+	} else if arguments != "" {
 		b.ToolCall.Arguments += arguments
+		s.Updated = true
 	}
-	s.Updated = true
 }
 func (s *Thread) ToolCallWithThinking(id string, name string, arguments string, thinkingText string, thinkingSignature string) {
 	var b *ThreadBlock
@@ -221,7 +239,7 @@ func (s *Thread) ToolResult(toolCall *ThreadToolCall, output string) {
 }
 func (s *Thread) findOrCreateIDBlock(id string, typ ThreadBlockType) *ThreadBlock {
 	blockIdx := len(s.Blocks) - 1
-	for blockIdx > 0 {
+	for blockIdx >= 0 {
 		if s.Blocks[blockIdx].Type == typ && s.Blocks[blockIdx].ID == id {
 			if s.Blocks[blockIdx].AliasFor != nil {
 				return s.Blocks[blockIdx].AliasFor

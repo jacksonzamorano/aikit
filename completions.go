@@ -50,6 +50,11 @@ func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
 
 func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
+	case InferenceBlockSystem:
+		p.request.Messages = append(p.request.Messages, CompletionsMessage{
+			Role:    "system",
+			Content: block.Text,
+		})
 	case InferenceBlockInput:
 		p.request.Messages = append(p.request.Messages, CompletionsMessage{
 			Role: "user",
@@ -113,29 +118,30 @@ func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult
 	}
 
 	for _, choice := range chunk.Choices {
-		id := fmt.Sprintf("%s-%d", chunk.Id, choice.Index)
+		baseId := fmt.Sprintf("%s-%d", chunk.Id, choice.Index)
 		if choice.Delta.ReasoningContent != "" {
-			thread.Thinking(id, choice.Delta.ReasoningContent)
+			thread.Thinking(baseId+"-thinking", choice.Delta.ReasoningContent)
 		}
 		if choice.Delta.Content != "" {
-			thread.Text(id, choice.Delta.Content)
+			thread.Text(baseId, choice.Delta.Content)
 		}
 
 		for i := range choice.Delta.ToolCalls {
 			tc := choice.Delta.ToolCalls[i]
-			id := tc.Id
-			if len(id) == 0 {
-				id = p.lastTool
+			toolId := tc.Id
+			if len(toolId) == 0 {
+				toolId = p.lastTool
 			} else {
-				p.lastTool = id
+				p.lastTool = toolId
 			}
 
 			if tc.Function != nil {
-				thread.ToolCall(id, tc.Function.Name, tc.Function.Arguments)
+				thread.ToolCall(toolId, tc.Function.Name, tc.Function.Arguments)
 			}
 		}
 		if choice.FinishReason != nil {
-			thread.Complete(id)
+			thread.Complete(baseId)
+			thread.Complete(baseId + "-thinking")
 		}
 	}
 	return AcceptedResult()

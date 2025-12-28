@@ -83,6 +83,8 @@ func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 
 func (p *MessagesAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
+	case InferenceBlockSystem:
+		p.request.System = block.Text
 	case InferenceBlockInput:
 		p.request.Messages = append(p.request.Messages, MessagesMessage{
 			Role: "user",
@@ -197,7 +199,7 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	case "message_start":
 		var ms MessagesStreamMessageStart
 		if err := json.Unmarshal(data, &ms); err == nil {
-			if thread.ThreadId == "" && ms.Message.ID != "" {
+			if ms.Message.ID != "" {
 				thread.ThreadId = ms.Message.ID
 			}
 			usage := ms.Message.Usage

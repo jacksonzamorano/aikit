@@ -141,6 +141,7 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 				result := s.Provider.OnChunk(ev.data, s.Thread)
 				if s.Thread.Updated {
 					onPartial(s.Thread)
+					s.Thread.Updated = false
 				}
 				if result.Error != nil {
 					return false, result.Error

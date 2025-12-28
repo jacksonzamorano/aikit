@@ -42,6 +42,13 @@ func (p *AIStudioAPIRequest) InitSession(thread *Thread) {
 
 func (p *AIStudioAPIRequest) Update(block *ThreadBlock) {
 	switch block.Type {
+	case InferenceBlockText:
+		p.request.Contents = append(p.request.Contents, AIStudioContent{
+			Role: "model",
+			Parts: []AIStudioPart{
+				{Text: block.Text},
+			},
+		})
 	case InferenceBlockInput:
 		p.request.Contents = append(p.request.Contents, AIStudioContent{
 			Role: "user",
@@ -100,7 +107,7 @@ func (p *AIStudioAPIRequest) Update(block *ThreadBlock) {
 	}
 }
 
-func (p AIStudioAPIRequest) MakeRequest(thread *Thread) *http.Request {
+func (p *AIStudioAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	modelsBase := p.Config.resolveEndpoint("/v1beta/models/")
 	endpoint, _ := url.JoinPath(modelsBase, thread.Model+":streamGenerateContent")
 	u, _ := url.Parse(endpoint)
@@ -115,7 +122,7 @@ func (p AIStudioAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	return providerReq
 }
 
-func (p AIStudioAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
+func (p *AIStudioAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	var chunk AIStudioGenerateContentResponse
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
@@ -125,6 +132,9 @@ func (p AIStudioAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	thread.Result.CacheReadTokens += chunk.Usage.CachedTokens
 	thread.ThreadId = chunk.ResponseId
 
+	if len(chunk.Candidates) == 0 {
+		return AcceptedResult()
+	}
 	candidate := chunk.Candidates[0]
 	if candidate.FinishReason != nil {
 		thread.Complete(chunk.ResponseId)
@@ -148,7 +158,7 @@ func (p AIStudioAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 	return AcceptedResult()
 }
 
-func (p AIStudioAPIRequest) ParseHttpError(code int, body []byte) *AIError {
+func (p *AIStudioAPIRequest) ParseHttpError(code int, body []byte) *AIError {
 	var data AIStudioErrorResponse
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil

@@ -134,7 +134,7 @@ func (p *ResponsesAPIRequest) OnChunk(rawData []byte, thread *Thread) ChunkResul
 		usage := data.Response.Usage
 		thread.Result.CacheReadTokens += usage.InputDetails.CachedTokens
 		thread.Result.InputTokens += (usage.InputTokens + usage.PromptTokens - usage.InputDetails.CachedTokens)
-		thread.Result.OutputTokens += data.Response.Usage.OutputTokens + data.Response.Usage.PromptTokens
+		thread.Result.OutputTokens += usage.OutputTokens + usage.CompletionTokens
 		thread.ThreadId = data.Response.Id
 		p.Request.PreviousResponseID = data.Response.Id
 		return DoneChunkResult()
