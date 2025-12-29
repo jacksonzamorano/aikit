@@ -66,7 +66,7 @@ func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 		Messages:  []MessagesMessage{},
 		Model:     thread.Model,
 		Tools:     tools,
-		MaxTokens: 10_000,
+		MaxTokens: p.Config.MaxTokens,
 		Stream:    true,
 	}
 

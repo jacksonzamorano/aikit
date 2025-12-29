@@ -6,35 +6,39 @@ import (
 )
 
 type Thread struct {
-	ReasoningEffort    string                                `json:"reasoning_effort"`
-	Tools              map[string]ToolDefinition             `json:"tools"`
-	MaxWebSearches     int                                   `json:"max_web_searches"`
-	WebFetchEnabled    bool                                  `json:"web_fetch_enabled"`
-	HandleToolFunction func(name string, args string) string `json:"-"`
-	UpdateOnFinalize   bool                                  `json:"update_on_finalize"`
-	CoalesceTextBlocks bool                                  `json:"coalesce_text_blocks"`
+	ReasoningEffort    string                                `json:"reasoning_effort" xml:"reasoning_effort,attr"`
+	Tools              map[string]ToolDefinition             `json:"tools" xml:"tools"`
+	MaxWebSearches     int                                   `json:"max_web_searches" xml:"max_web_searches,attr"`
+	WebFetchEnabled    bool                                  `json:"web_fetch_enabled" xml:"web_fetch_enabled,attr"`
+	HandleToolFunction func(name string, args string) string `json:"-" xml:"-"`
+	UpdateOnFinalize   bool                                  `json:"update_on_finalize" xml:"update_on_finalize,attr"`
+	CoalesceTextBlocks bool                                  `json:"coalesce_text_blocks" xml:"coalesce_text_blocks,attr"`
 
-	Success bool        `json:"success"`
-	Error   error       `json:"error,omitempty"`
-	Result  ThreadUsage `json:"result"`
+	Success bool        `json:"success" xml:"success,attr"`
+	Error   string      `json:"error,omitempty" xml:"error,omitempty"`
+	Result  ThreadUsage `json:"result" xml:"result"`
 
-	Model    string `json:"model,omitempty"`
-	ThreadId string `json:"thread_id,omitempty"`
+	Model    string `json:"model,omitempty" xml:"model,attr,omitempty"`
+	ThreadId string `json:"thread_id,omitempty" xml:"thread_id,attr,omitempty"`
 
-	Blocks []*ThreadBlock `json:"blocks"`
+	Blocks []*ThreadBlock `json:"blocks" xml:"blocks>block"`
 
-	Updated bool `json:"-"`
+	Updated         bool   `json:"-" xml:"-"`
+	CurrentProvider string `json:"-" xml:"-"`
+}
 
-	incompleteToolCalls int
+// Snapshot represents a serializable snapshot of a Thread's conversation blocks.
+type Snapshot struct {
+	Blocks []*ThreadBlock `json:"blocks" xml:"blocks>block"`
 }
 
 type ThreadUsage struct {
-	CacheReadTokens  int64 `json:"cache_read_tokens"`
-	CacheWriteTokens int64 `json:"cache_write_tokens"`
-	InputTokens      int64 `json:"input_tokens"`
-	OutputTokens     int64 `json:"output_tokens"`
-	WebSearches      int   `json:"web_searches"`
-	PageViews        int   `json:"page_views"`
+	CacheReadTokens  int64 `json:"cache_read_tokens" xml:"cache_read_tokens,attr"`
+	CacheWriteTokens int64 `json:"cache_write_tokens" xml:"cache_write_tokens,attr"`
+	InputTokens      int64 `json:"input_tokens" xml:"input_tokens,attr"`
+	OutputTokens     int64 `json:"output_tokens" xml:"output_tokens,attr"`
+	WebSearches      int   `json:"web_searches" xml:"web_searches,attr"`
+	PageViews        int   `json:"page_views" xml:"page_views,attr"`
 }
 
 func (state *Thread) Debug() string {
@@ -55,10 +59,41 @@ func NewProviderState() *Thread {
 	return &Thread{}
 }
 
+// SetError sets the error message from an error and marks success as false.
+func (s *Thread) SetError(err error) {
+	s.Error = err.Error()
+	s.Success = false
+}
+
+// IncompleteToolCalls returns the count of tool call blocks that are not yet complete.
+func (s *Thread) IncompleteToolCalls() int {
+	count := 0
+	for _, b := range s.Blocks {
+		if b.Type == InferenceBlockToolCall && !b.Complete {
+			count++
+		}
+	}
+	return count
+}
+
+// Snapshot creates a serializable snapshot of the Thread's conversation blocks.
+func (s *Thread) Snapshot() *Snapshot {
+	return &Snapshot{
+		Blocks: s.Blocks,
+	}
+}
+
+// Restore restores the Thread's blocks from a snapshot.
+func (s *Thread) Restore(snapshot *Snapshot) {
+	s.Blocks = make([]*ThreadBlock, len(snapshot.Blocks))
+	copy(s.Blocks, snapshot.Blocks)
+}
+
 func (s *Thread) create(id string, typ ThreadBlockType) *ThreadBlock {
 	b := &ThreadBlock{
-		ID:   id,
-		Type: typ,
+		ID:         id,
+		Type:       typ,
+		ProviderID: s.CurrentProvider,
 	}
 	s.Blocks = append(s.Blocks, b)
 	return b
@@ -141,14 +176,11 @@ func (s *Thread) Coalesce(id string, typ ThreadBlockType) *ThreadBlock {
 		return nil
 	}
 
-	og_block := s.Blocks[searchIdx]
-	if og_block.AliasFor != nil {
-		og_block = og_block.AliasFor
-	}
+	// Mark the previous block as continued
+	s.Blocks[searchIdx].Continued = true
 
+	// Create the new block
 	b := s.create(id, typ)
-	b.AliasFor = og_block
-	b.AliasId = og_block.ID
 	return b
 }
 func (s *Thread) Cite(id string, citation string) {
@@ -206,7 +238,6 @@ func (s *Thread) ToolCall(id string, name string, arguments string) {
 	}
 	if b == nil {
 		b = s.create(id, InferenceBlockToolCall)
-		s.incompleteToolCalls++
 		b.ToolCall = &ThreadToolCall{
 			ID:        id,
 			Name:      name,
@@ -241,7 +272,6 @@ func (s *Thread) ToolCallWithThinking(id string, name string, arguments string, 
 			Name:      name,
 			Arguments: arguments,
 		}
-		s.incompleteToolCalls++
 	} else {
 		b.ToolCall.Arguments += arguments
 	}
@@ -250,7 +280,6 @@ func (s *Thread) ToolCallWithThinking(id string, name string, arguments string, 
 	s.Updated = true
 }
 func (s *Thread) ToolResult(toolCall *ThreadToolCall, output string) {
-	s.incompleteToolCalls--
 	b := s.getType(toolCall.ID, InferenceBlockToolCall)
 	if b != nil {
 		b.ToolResult = &ThreadToolResult{
@@ -265,9 +294,6 @@ func (s *Thread) findOrCreateIDBlock(id string, typ ThreadBlockType) *ThreadBloc
 	blockIdx := len(s.Blocks) - 1
 	for blockIdx >= 0 {
 		if s.Blocks[blockIdx].Type == typ && s.Blocks[blockIdx].ID == id {
-			if s.Blocks[blockIdx].AliasFor != nil {
-				return s.Blocks[blockIdx].AliasFor
-			}
 			return s.Blocks[blockIdx]
 		}
 		blockIdx--

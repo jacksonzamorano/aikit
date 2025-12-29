@@ -56,6 +56,7 @@ func AnthropicProvider(key string) ProviderConfig {
 		BetaFeatures: []string{
 			"interleaved-thinking-2025-05-14",
 		},
+		MaxTokens:           64_000,
 		MakeSessionFunction: CreateMessagesSession,
 	}
 }

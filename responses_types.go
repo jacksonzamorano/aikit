@@ -71,6 +71,9 @@ type ResponsesInput struct {
 	Id         string             `json:"id,omitempty"`
 	Type       string             `json:"type,omitempty"`
 	Role       string             `json:"role,omitempty"`
+	Name       string             `json:"name,omitempty"`
+	Arguments  string             `json:"arguments,omitempty"`
+	Status     string             `json:"status,omitempty"`
 	Content    []ResponsesContent `json:"content,omitempty"`
 	ToolCallId string             `json:"call_id,omitempty"`
 	Output     any                `json:"output,omitempty"`

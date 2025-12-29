@@ -20,31 +20,31 @@ const (
 )
 
 type ThreadToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	ID        string `json:"id" xml:"id,attr"`
+	Name      string `json:"name" xml:"name,attr"`
+	Arguments string `json:"arguments" xml:"arguments"`
 }
 
 type ThreadToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Output     string `json:"output"`
+	ToolCallID string `json:"tool_call_id" xml:"tool_call_id,attr"`
+	Output     string `json:"output" xml:"output"`
 }
 
 type ThreadWebSearch struct {
-	Query   string                  `json:"query"`
-	Results []ThreadWebSearchResult `json:"results"`
+	Query   string                  `json:"query" xml:"query,attr"`
+	Results []ThreadWebSearchResult `json:"results" xml:"results>result"`
 }
 
 type ThreadWebSearchResult struct {
-	Title string `json:"title"`
-	URL   string `json:"url"`
+	Title string `json:"title" xml:"title,attr"`
+	URL   string `json:"url" xml:"url,attr"`
 }
 
 // ThreadImage represents image data for vision input.
 // Images are always stored as base64-encoded strings.
 type ThreadImage struct {
-	Base64    string `json:"base64"`     // Base64-encoded image data
-	MediaType string `json:"media_type"` // MIME type (e.g., "image/jpeg", "image/png")
+	Base64    string `json:"base64" xml:"base64"`
+	MediaType string `json:"media_type" xml:"media_type,attr"`
 }
 
 // GetBase64 returns the base64-encoded image data.
@@ -59,20 +59,19 @@ func (img *ThreadImage) GetDataURL() string {
 }
 
 type ThreadBlock struct {
-	ID   string          `json:"id,omitempty"`
-	Type ThreadBlockType `json:"type"`
+	ID   string          `json:"id,omitempty" xml:"id,attr,omitempty"`
+	Type ThreadBlockType `json:"type" xml:"type,attr"`
 
-	AliasId  string       `json:"alias_id,omitempty"`
-	AliasFor *ThreadBlock `json:"-"`
-
-	Text       string            `json:"text,omitempty"`
-	Signature  string            `json:"signature,omitempty"`
-	ToolCall   *ThreadToolCall   `json:"tool_call,omitempty"`
-	ToolResult *ThreadToolResult `json:"tool_result,omitempty"`
-	WebSearch  *ThreadWebSearch  `json:"web_search,omitempty"`
-	Image      *ThreadImage      `json:"image,omitempty"`
-	Complete   bool              `json:"complete"`
-	Citations  []string          `json:"citations,omitempty"`
+	Text       string            `json:"text,omitempty" xml:"text,omitempty"`
+	Signature  string            `json:"signature,omitempty" xml:"signature,omitempty"`
+	ToolCall   *ThreadToolCall   `json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	ToolResult *ThreadToolResult `json:"tool_result,omitempty" xml:"tool_result,omitempty"`
+	WebSearch  *ThreadWebSearch  `json:"web_search,omitempty" xml:"web_search,omitempty"`
+	Image      *ThreadImage      `json:"image,omitempty" xml:"image,omitempty"`
+	Complete   bool              `json:"complete" xml:"complete,attr"`
+	Continued  bool              `json:"continued,omitempty" xml:"continued,attr,omitempty"`
+	Citations  []string          `json:"citations,omitempty" xml:"citations>citation,omitempty"`
+	ProviderID string            `json:"provider_id,omitempty" xml:"provider_id,attr,omitempty"`
 }
 
 func (b *ThreadBlock) Description() string {

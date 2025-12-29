@@ -79,6 +79,7 @@ func CreateAIStudioSession(config *ProviderConfig) *Session {
 func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 	// Perform one-off initialization
 	s.Provider.InitSession(s.Thread)
+	s.Thread.CurrentProvider = s.Provider.Name()
 
 	// Keep track of changed blocks.
 	lastBlock := 0
@@ -87,13 +88,25 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 		// Update blocks from last turn.
 		// Will also handle tool calls synchronously.
 		for lastBlock < len(s.Thread.Blocks) {
-			switch s.Thread.Blocks[lastBlock].Type {
-			case InferenceBlockToolCall:
-				block := s.Thread.Blocks[lastBlock]
-				res := s.Thread.HandleToolFunction(block.ToolCall.Name, block.ToolCall.Arguments)
-				s.Thread.ToolResult(block.ToolCall, res)
+			block := s.Thread.Blocks[lastBlock]
+
+			// Skip thinking blocks from different providers
+			if block.Type == InferenceBlockThinking || block.Type == InferenceBlockEncryptedThinking {
+				if block.ProviderID != "" && block.ProviderID != s.Provider.Name() {
+					lastBlock++
+					continue
+				}
 			}
-			s.Provider.Update(s.Thread.Blocks[lastBlock])
+
+			switch block.Type {
+			case InferenceBlockToolCall:
+				// Only execute tool if it doesn't already have a result (for restored sessions)
+				if block.ToolResult == nil {
+					res := s.Thread.HandleToolFunction(block.ToolCall.Name, block.ToolCall.Arguments)
+					s.Thread.ToolResult(block.ToolCall, res)
+				}
+			}
+			s.Provider.Update(block)
 			lastBlock++
 		}
 
@@ -103,21 +116,19 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 			log.Printf("[Session] Request made to %s", req.URL.String())
 		}
 		if err != nil {
-			s.Thread.Success = false
-			s.Thread.Error = err
+			s.Thread.SetError(err)
 			return s.Thread
 		}
 		if resp.StatusCode >= 300 {
-			err, _ := io.ReadAll(resp.Body)
-			s.Thread.Success = false
-			if parsedErr := s.Provider.ParseHttpError(resp.StatusCode, err); parsedErr != nil {
-				s.Thread.Error = parsedErr
+			body, _ := io.ReadAll(resp.Body)
+			if parsedErr := s.Provider.ParseHttpError(resp.StatusCode, body); parsedErr != nil {
+				s.Thread.SetError(parsedErr)
 			} else {
-				s.Thread.Error = &AIError{
+				s.Thread.SetError(&AIError{
 					Category: AIErrorCategoryHTTPStatus,
-					Message:  fmt.Sprintf("Unhandled error. Received status code %d with body %s", resp.StatusCode, string(err)),
+					Message:  fmt.Sprintf("Unhandled error. Received status code %d with body %s", resp.StatusCode, string(body)),
 					Provider: s.Provider.Name(),
-				}
+				})
 			}
 			return s.Thread
 		}
@@ -156,10 +167,9 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 				log.Printf("[Session] %s", string(dbg))
 			}
 			if err != nil {
-				s.Thread.Success = false
-				s.Thread.Error = err
+				s.Thread.SetError(err)
 				return s.Thread
-			} else if s.Thread.incompleteToolCalls == 0 {
+			} else if s.Thread.IncompleteToolCalls() == 0 {
 				s.Thread.Success = true
 				return s.Thread
 			}

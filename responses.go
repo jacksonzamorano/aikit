@@ -97,6 +97,15 @@ func (p *ResponsesAPIRequest) Update(block *ThreadBlock) {
 	case InferenceBlockSystem:
 		p.Request.Instructions = block.Text
 	case InferenceBlockToolCall:
+		if block.ProviderID != p.Name() {
+			p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{
+				Type:       "function_call",
+				ToolCallId: block.ToolCall.ID,
+				Name:       block.ToolCall.Name,
+				Arguments:  block.ToolCall.Arguments,
+				Status:     "completed",
+			})
+		}
 		if block.ToolResult != nil {
 			res, _ := json.Marshal(block.ToolResult.Output)
 			p.Request.Inputs = append(p.Request.Inputs, ResponsesInput{

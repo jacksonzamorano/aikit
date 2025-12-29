@@ -31,6 +31,41 @@ type integrationTestConfig struct {
 	TestName        string
 }
 
+type snapshotTestConfig struct {
+	Provider1        aikit.ProviderConfig
+	Model1           string
+	ReasoningEffort1 *string
+	Provider2        aikit.ProviderConfig
+	Model2           string
+	ReasoningEffort2 *string
+	TestName         string
+}
+
+// Memory tools for snapshot tests - allows data dependency between phases
+var memoryTools = map[string]aikit.ToolDefinition{
+	"memory_store": {
+		Description: "Store a value in memory with a key",
+		Parameters: &aikit.ToolJsonSchema{
+			Type: "object",
+			Properties: &map[string]*aikit.ToolJsonSchema{
+				"key":   {Type: "string", Description: "The key to store the value under"},
+				"value": {Type: "string", Description: "The value to store"},
+			},
+			Required: []string{"key", "value"},
+		},
+	},
+	"memory_get": {
+		Description: "Retrieve a value from memory by key",
+		Parameters: &aikit.ToolJsonSchema{
+			Type: "object",
+			Properties: &map[string]*aikit.ToolJsonSchema{
+				"key": {Type: "string", Description: "The key to retrieve"},
+			},
+			Required: []string{"key"},
+		},
+	},
+}
+
 // =============================================================================
 // SHARED VALIDATION RUNNER - TOOL CALLS
 // =============================================================================
@@ -38,7 +73,6 @@ type integrationTestConfig struct {
 func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	t.Helper()
 
-	all := ""
 	var lastHash string
 	toolFunctionCalled := 0
 
@@ -90,8 +124,6 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	session.Debug = testDebugEnabled
 
 	result := session.Stream(func(result *aikit.Thread) {
-		all += snapshotResult(*result)
-
 		// Streaming hash uniqueness check
 		bytes, _ := json.Marshal(result.Blocks)
 		hash := sha256.Sum256(bytes)
@@ -101,7 +133,7 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 		}
 		lastHash = currentHash
 	})
-	all += snapshotResult(*result)
+	all := snapshotResult(*result)
 
 	// Write test run data
 	writeTestRun(cfg.TestName+"_tool", all)
@@ -123,7 +155,6 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	t.Helper()
 
-	all := ""
 	var lastHash string
 
 	session := cfg.Provider.Session()
@@ -138,8 +169,6 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	session.Debug = testDebugEnabled
 
 	result := session.Stream(func(result *aikit.Thread) {
-		all += snapshotResult(*result)
-
 		// Streaming hash uniqueness check
 		bytes, _ := json.Marshal(result.Blocks)
 		hash := sha256.Sum256(bytes)
@@ -149,7 +178,7 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 		}
 		lastHash = currentHash
 	})
-	all += snapshotResult(*result)
+	all := snapshotResult(*result)
 
 	// Write test run data
 	writeTestRun(cfg.TestName+"_websearch", all)
@@ -215,6 +244,121 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 }
 
 // =============================================================================
+// SHARED VALIDATION RUNNER - SNAPSHOT RESTORE
+// =============================================================================
+
+func runSnapshotRestoreValidation(t *testing.T, cfg snapshotTestConfig) {
+	t.Helper()
+
+	memoryStore := make(map[string]string)
+	secretValue := fmt.Sprintf("secret_%d", time.Now().UnixNano())
+
+	// Memory tool handler - shared across both sessions
+	handleMemoryTool := func(name string, args string) string {
+		var parsed struct {
+			Key   string `json:"key"`
+			Value string `json:"value,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(args), &parsed); err != nil {
+			return fmt.Sprintf("Error: Invalid arguments: %s", err.Error())
+		}
+
+		switch name {
+		case "memory_store":
+			memoryStore[parsed.Key] = parsed.Value
+			return fmt.Sprintf("Stored '%s' = '%s'", parsed.Key, parsed.Value)
+		case "memory_get":
+			if val, ok := memoryStore[parsed.Key]; ok {
+				return val
+			}
+			return "Key not found"
+		default:
+			return fmt.Sprintf("Error: Unknown tool: %s", name)
+		}
+	}
+
+	all := ""
+
+	// ==========================================================================
+	// Phase 1: Initial conversation with Provider 1
+	// ==========================================================================
+	session1 := cfg.Provider1.Session()
+	session1.Thread.Model = cfg.Model1
+	if cfg.ReasoningEffort1 != nil {
+		session1.Thread.ReasoningEffort = *cfg.ReasoningEffort1
+	}
+	session1.Thread.Tools = memoryTools
+	session1.Thread.HandleToolFunction = handleMemoryTool
+	session1.Thread.CoalesceTextBlocks = true
+	session1.Thread.System("You are a helpful assistant with memory capabilities. When asked to store something, use the memory_store tool. When asked to retrieve something, use the memory_get tool.")
+	session1.Thread.Input(fmt.Sprintf("Please store the value '%s' with key 'secret' using the memory_store tool, then confirm what you stored.", secretValue))
+	session1.Debug = testDebugEnabled
+
+	result1 := session1.Stream(func(result *aikit.Thread) {})
+	all += snapshotResult(*result1)
+
+	// Validate Phase 1
+	if !result1.Success {
+		t.Fatalf("Phase 1 failed: %s", result1.Error)
+	}
+	validateBasicResults(t, result1)
+	validateToolCallPairing(t, result1)
+
+	// Verify the tool was actually called with the secret value
+	if storedVal, ok := memoryStore["secret"]; !ok || storedVal != secretValue {
+		t.Errorf("Phase 1: Expected secret value '%s' to be stored, got '%s'", secretValue, storedVal)
+	}
+
+	// ==========================================================================
+	// Phase 2: Serialize and restore snapshot
+	// ==========================================================================
+	snapshot := session1.Thread.Snapshot()
+
+	// Serialize to JSON
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("Failed to marshal snapshot: %v", err)
+	}
+
+	// Deserialize to new snapshot
+	var restoredSnapshot aikit.Snapshot
+	if err := json.Unmarshal(data, &restoredSnapshot); err != nil {
+		t.Fatalf("Failed to unmarshal snapshot: %v", err)
+	}
+
+	// Validate snapshot integrity
+	validateSnapshotIntegrity(t, snapshot, &restoredSnapshot)
+
+	// ==========================================================================
+	// Phase 3: Continue conversation with Provider 2
+	// ==========================================================================
+	session2 := cfg.Provider2.Session()
+	session2.Thread.Model = cfg.Model2
+	if cfg.ReasoningEffort2 != nil {
+		session2.Thread.ReasoningEffort = *cfg.ReasoningEffort2
+	}
+	session2.Thread.Restore(&restoredSnapshot)
+	session2.Thread.Tools = memoryTools
+	session2.Thread.HandleToolFunction = handleMemoryTool
+	session2.Thread.CoalesceTextBlocks = true
+	session2.Thread.Input("What value did you store earlier? Use the memory_get tool with key 'secret' to retrieve it and tell me the value.")
+	session2.Debug = testDebugEnabled
+
+	result2 := session2.Stream(func(result *aikit.Thread) {})
+	all += snapshotResult(*result2)
+
+	// Write test run data
+	writeTestRun(cfg.TestName+"_snapshot", all)
+
+	// Validate Phase 2
+	if !result2.Success {
+		t.Fatalf("Phase 2 failed: %s", result2.Error)
+	}
+	validateBasicResults(t, result2)
+	validateCrossProviderContext(t, result2, secretValue)
+}
+
+// =============================================================================
 // VALIDATION FUNCTIONS
 // =============================================================================
 
@@ -240,12 +384,7 @@ func validateBlockIntegrity(t *testing.T, result *aikit.Thread) {
 		if b.ID == "" && b.Type != aikit.InferenceBlockInput && b.Type != aikit.InferenceBlockSystem && b.Type != aikit.InferenceBlockInputImage {
 			t.Errorf("Block of type %s has no ID.", b.Type)
 		}
-		if b.AliasFor != nil && b.AliasId == "" {
-			t.Errorf("Block %s is an alias but has no AliasId.", b.ID)
-		}
-		if b.AliasId != "" && b.AliasFor == nil {
-			t.Errorf("Block %s has an AliasId but is not an alias.", b.ID)
-		}
+		// Continued blocks are valid - no special validation needed
 	}
 }
 
@@ -361,6 +500,60 @@ func validateImageInputResponse(t *testing.T, result *aikit.Thread) {
 	}
 	if !hasTextResponse {
 		t.Error("No text response found for image input")
+	}
+}
+
+func validateSnapshotIntegrity(t *testing.T, original *aikit.Snapshot, restored *aikit.Snapshot) {
+	t.Helper()
+	if len(original.Blocks) != len(restored.Blocks) {
+		t.Errorf("Snapshot block count mismatch: original=%d, restored=%d", len(original.Blocks), len(restored.Blocks))
+		return
+	}
+	for i, origBlock := range original.Blocks {
+		restoredBlock := restored.Blocks[i]
+		if origBlock.Type != restoredBlock.Type {
+			t.Errorf("Block %d type mismatch: original=%s, restored=%s", i, origBlock.Type, restoredBlock.Type)
+		}
+		if origBlock.Text != restoredBlock.Text {
+			t.Errorf("Block %d text mismatch", i)
+		}
+		if origBlock.ID != restoredBlock.ID {
+			t.Errorf("Block %d ID mismatch: original=%s, restored=%s", i, origBlock.ID, restoredBlock.ID)
+		}
+	}
+}
+
+func validateCrossProviderContext(t *testing.T, result *aikit.Thread, expectedValue string) {
+	t.Helper()
+
+	// Check if there's a memory_get tool call
+	hasMemoryGet := false
+	for _, b := range result.Blocks {
+		if b.Type == aikit.InferenceBlockToolCall && b.ToolCall != nil {
+			if b.ToolCall.Name == "memory_get" {
+				hasMemoryGet = true
+				// Verify the tool result contains the expected value
+				if b.ToolResult != nil && !strings.Contains(b.ToolResult.Output, expectedValue) {
+					t.Errorf("memory_get tool result doesn't contain expected value '%s', got '%s'", expectedValue, b.ToolResult.Output)
+				}
+			}
+		}
+	}
+
+	if !hasMemoryGet {
+		t.Log("Note: No memory_get tool call found - model may have used context from conversation history instead")
+	}
+
+	// Check if the response text mentions the secret value
+	hasSecretInResponse := false
+	for _, b := range result.Blocks {
+		if b.Type == aikit.InferenceBlockText && strings.Contains(b.Text, expectedValue) {
+			hasSecretInResponse = true
+			break
+		}
+	}
+	if !hasSecretInResponse {
+		t.Errorf("Response doesn't contain the expected secret value '%s'", expectedValue)
 	}
 }
 
@@ -513,5 +706,36 @@ func TestIntegration_XAI_ImageInput(t *testing.T) {
 		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
 		Model:    "grok-4-1-fast-reasoning-latest",
 		TestName: "xai",
+	})
+}
+
+// =============================================================================
+// SNAPSHOT/RESTORE INTEGRATION TESTS
+// =============================================================================
+
+func TestIntegration_Snapshot_SameProvider_Anthropic(t *testing.T) {
+	runSnapshotRestoreValidation(t, snapshotTestConfig{
+		Provider1:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model1:           "claude-haiku-4-5-20251001",
+		ReasoningEffort1: &anthropicReasoningEffort,
+		Provider2:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model2:           "claude-haiku-4-5-20251001",
+		ReasoningEffort2: &anthropicReasoningEffort,
+		TestName:         "snapshot_anthropic_to_anthropic",
+	})
+}
+
+func TestIntegration_Snapshot_CrossProvider_Anthropic_OpenAI(t *testing.T) {
+	// Cross-provider snapshot/restore with tool calls is not supported because
+	// tool call IDs are provider-specific (Anthropic uses toolu_..., OpenAI uses call_...).
+	// This test validates context preservation without tool call history.
+	runSnapshotRestoreValidation(t, snapshotTestConfig{
+		Provider1:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model1:           "claude-haiku-4-5-20251001",
+		ReasoningEffort1: &anthropicReasoningEffort,
+		Provider2:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model2:           "gpt-5-nano",
+		ReasoningEffort2: &openaiReasoningEffort,
+		TestName:         "snapshot_anthropic_to_openai",
 	})
 }

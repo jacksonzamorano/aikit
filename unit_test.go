@@ -32,8 +32,8 @@ func TestUnit_Thread_ToolResultWithSingleToolCall(t *testing.T) {
 	thread := &Thread{Blocks: []*ThreadBlock{}}
 	thread.ToolCall("call_1", "test_tool", `{"query": "test"}`)
 
-	if thread.incompleteToolCalls != 1 {
-		t.Errorf("Expected 1 incomplete tool call, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 1 {
+		t.Errorf("Expected 1 incomplete tool call, got %d", thread.IncompleteToolCalls())
 	}
 
 	block := thread.Blocks[0]
@@ -48,42 +48,42 @@ func TestUnit_Thread_ToolResultWithSingleToolCall(t *testing.T) {
 	if !block.Complete {
 		t.Error("Block should be marked complete after ToolResult")
 	}
-	if thread.incompleteToolCalls != 0 {
-		t.Errorf("Expected 0 incomplete tool calls, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 0 {
+		t.Errorf("Expected 0 incomplete tool calls, got %d", thread.IncompleteToolCalls())
 	}
 }
 
 func TestUnit_Thread_IncompleteToolCallsCounter(t *testing.T) {
 	thread := &Thread{Blocks: []*ThreadBlock{}}
 
-	if thread.incompleteToolCalls != 0 {
-		t.Errorf("Initial incompleteToolCalls should be 0, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 0 {
+		t.Errorf("Initial IncompleteToolCalls should be 0, got %d", thread.IncompleteToolCalls())
 	}
 
 	thread.ToolCall("call_1", "tool_a", "")
-	if thread.incompleteToolCalls != 1 {
-		t.Errorf("After 1st ToolCall, expected 1, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 1 {
+		t.Errorf("After 1st ToolCall, expected 1, got %d", thread.IncompleteToolCalls())
 	}
 
 	thread.ToolCall("call_2", "tool_b", "")
-	if thread.incompleteToolCalls != 2 {
-		t.Errorf("After 2nd ToolCall, expected 2, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 2 {
+		t.Errorf("After 2nd ToolCall, expected 2, got %d", thread.IncompleteToolCalls())
 	}
 
 	// Appending to existing tool call should NOT increment counter
 	thread.ToolCall("call_1", "", `{"more": "args"}`)
-	if thread.incompleteToolCalls != 2 {
-		t.Errorf("After appending args, expected 2, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 2 {
+		t.Errorf("After appending args, expected 2, got %d", thread.IncompleteToolCalls())
 	}
 
 	thread.ToolResult(thread.Blocks[0].ToolCall, "result_1")
-	if thread.incompleteToolCalls != 1 {
-		t.Errorf("After 1st ToolResult, expected 1, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 1 {
+		t.Errorf("After 1st ToolResult, expected 1, got %d", thread.IncompleteToolCalls())
 	}
 
 	thread.ToolResult(thread.Blocks[1].ToolCall, "result_2")
-	if thread.incompleteToolCalls != 0 {
-		t.Errorf("After 2nd ToolResult, expected 0, got %d", thread.incompleteToolCalls)
+	if thread.IncompleteToolCalls() != 0 {
+		t.Errorf("After 2nd ToolResult, expected 0, got %d", thread.IncompleteToolCalls())
 	}
 }
 
@@ -113,8 +113,8 @@ func TestUnit_Thread_CoalesceTextBlocks(t *testing.T) {
 	if len(thread.Blocks) != 2 {
 		t.Fatalf("Expected 2 blocks, got %d", len(thread.Blocks))
 	}
-	if thread.Blocks[1].AliasFor != thread.Blocks[0] {
-		t.Error("Second block should alias first block when coalescing")
+	if !thread.Blocks[0].Continued {
+		t.Error("First block should have Continued=true when coalescing")
 	}
 }
 
@@ -1449,23 +1449,26 @@ func TestUnit_Thread_CoalesceMultipleTextBlocks(t *testing.T) {
 	thread.Text("text_1", "Hello")
 	// Create second block - should coalesce to first since last block is text
 	thread.Text("text_2", " World")
-	// Create third block - should coalesce to first (via second's alias chain)
+	// Create third block - should coalesce (second block marked as continued)
 	thread.Text("text_3", "!")
 
 	if len(thread.Blocks) != 3 {
 		t.Fatalf("Expected 3 blocks, got %d", len(thread.Blocks))
 	}
 
-	// Second should alias to first
-	if thread.Blocks[1].AliasFor != thread.Blocks[0] {
-		t.Error("Second block should alias first")
+	// First and second should be marked as continued
+	if !thread.Blocks[0].Continued {
+		t.Error("First block should have Continued=true")
 	}
-	// Third should alias to first (resolved through alias chain)
-	if thread.Blocks[2].AliasFor != thread.Blocks[0] {
-		t.Error("Third block should alias first (not second)")
+	if !thread.Blocks[1].Continued {
+		t.Error("Second block should have Continued=true")
+	}
+	// Third should NOT be continued (it's the last one)
+	if thread.Blocks[2].Continued {
+		t.Error("Third block should NOT have Continued=true")
 	}
 
-	// Each block keeps its own text (coalescing is via alias chain)
+	// Each block keeps its own text
 	if thread.Blocks[0].Text != "Hello" {
 		t.Errorf("First block should have 'Hello', got %q", thread.Blocks[0].Text)
 	}
@@ -1485,14 +1488,15 @@ func TestUnit_Thread_CoalesceBreaksOnDifferentBlockType(t *testing.T) {
 	thread.Text("text_2", " World") // Last block is ToolCall, NOT Text - no coalescing
 
 	// Coalescing should NOT happen since last block was a tool call
-	// The second text block should be its own block, not aliased
+	// First text block should NOT be marked as continued (no following text block)
 	if thread.Blocks[0].Text != "Hello" {
 		t.Errorf("First block should have 'Hello', got %q", thread.Blocks[0].Text)
 	}
 	if thread.Blocks[2].Text != " World" {
 		t.Errorf("Third block should have ' World', got %q", thread.Blocks[2].Text)
 	}
-	if thread.Blocks[2].AliasFor != nil {
-		t.Error("Third block should NOT be aliased when last block was not a text block")
+	// First block should NOT be continued since the following block is a tool call
+	if thread.Blocks[0].Continued {
+		t.Error("First text block should NOT have Continued=true when followed by tool call")
 	}
 }

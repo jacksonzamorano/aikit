@@ -22,6 +22,7 @@ type ProviderConfig struct {
 	BetaFeatures         []string
 	APIVersion           string
 	UseThinkingSummaries bool
+	MaxTokens            int64
 
 	MakeSessionFunction func(*ProviderConfig) *Session
 }

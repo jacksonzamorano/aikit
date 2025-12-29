@@ -16,7 +16,7 @@ type MessagesRequest struct {
 	Tools     []map[string]any  `json:"tools"`
 	System    string            `json:"system"`
 	MaxTokens int64             `json:"max_tokens"`
-	Thinking  *MessagesThinking `json:"thinking"`
+	Thinking  *MessagesThinking `json:"thinking,omitempty"`
 	Stream    bool              `json:"stream"`
 }
 type MessagesMessage struct {
