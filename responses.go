@@ -49,9 +49,9 @@ func (p *ResponsesAPIRequest) InitSession(thread *Thread) {
 		Stream: true,
 	}
 
-	if thread.ReasoningEffort != "" {
+	if thread.Reasoning.Effort != "" {
 		p.Request.Reasoning = &ResponsesReasoning{
-			Effort: thread.ReasoningEffort,
+			Effort: thread.Reasoning.Effort,
 		}
 		if p.Config.UseThinkingSummaries {
 			p.Request.Reasoning.Summary = "auto"
