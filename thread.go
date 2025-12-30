@@ -13,26 +13,42 @@ type ReasoningConfig struct {
 	Budget int    `json:"budget,omitempty" xml:"budget,attr,omitempty"`
 }
 
+// Thread represents an inference conversation with configuration and execution state.
+//
+// Thread is NOT directly serializable. For persistence, use the Snapshot() method which
+// returns only the conversation blocks. Configuration (Model, Tools, Reasoning, etc.)
+// and execution results (Success, Error, Result) must be managed separately by the caller.
+//
+// This design is intentional because:
+//   - Tool handlers cannot be serialized
+//   - Configuration is typically code-defined, not persisted
+//   - Restoring to a different model/provider is a valid use case
+//   - Execution results should not carry over to restored conversations
 type Thread struct {
-	Reasoning          ReasoningConfig                       `json:"reasoning" xml:"reasoning"`
-	Tools              map[string]ToolDefinition             `json:"tools" xml:"tools"`
-	MaxWebSearches     int                                   `json:"max_web_searches" xml:"max_web_searches,attr"`
-	WebFetchEnabled    bool                                  `json:"web_fetch_enabled" xml:"web_fetch_enabled,attr"`
-	HandleToolFunction func(name string, args string) string `json:"-" xml:"-"`
-	UpdateOnFinalize   bool                                  `json:"update_on_finalize" xml:"update_on_finalize,attr"`
-	CoalesceTextBlocks bool                                  `json:"coalesce_text_blocks" xml:"coalesce_text_blocks,attr"`
+	// Configuration
+	Reasoning          ReasoningConfig
+	Tools              map[string]ToolDefinition
+	MaxWebSearches     int
+	WebFetchEnabled    bool
+	HandleToolFunction func(name string, args string) string
+	UpdateOnFinalize   bool
+	CoalesceTextBlocks bool
 
-	Success bool        `json:"success" xml:"success,attr"`
-	Error   string      `json:"error,omitempty" xml:"error,omitempty"`
-	Result  ThreadUsage `json:"result" xml:"result"`
+	// Execution results - not restored from snapshots
+	Success bool
+	Error   string
+	Result  ThreadUsage
 
-	Model    string `json:"model,omitempty" xml:"model,attr,omitempty"`
-	ThreadId string `json:"thread_id,omitempty" xml:"thread_id,attr,omitempty"`
+	// Metadata
+	Model    string
+	ThreadId string
 
-	Blocks []*ThreadBlock `json:"blocks" xml:"blocks>block"`
+	// Conversation state - use Snapshot()/Restore() for persistence
+	Blocks []*ThreadBlock
 
-	updated         bool   `json:"-" xml:"-"`
-	CurrentProvider string `json:"-" xml:"-"`
+	// Runtime state (private, not serializable)
+	updated         bool
+	CurrentProvider string
 }
 
 // TakeUpdate returns the current update flag and resets it to false.
@@ -46,31 +62,31 @@ func (s *Thread) TakeUpdate() bool {
 }
 
 // Snapshot represents a serializable snapshot of a Thread's conversation blocks.
+// This is the primary serialization mechanism for persisting conversation history.
+//
+// Usage:
+//
+//	// Save conversation
+//	snapshot := thread.Snapshot()
+//	data, _ := json.Marshal(snapshot)
+//
+//	// Restore conversation
+//	var restored Snapshot
+//	json.Unmarshal(data, &restored)
+//	newThread.Restore(&restored)
+//	// Re-configure: newThread.Model, newThread.Tools, etc.
 type Snapshot struct {
 	Blocks []*ThreadBlock `json:"blocks" xml:"blocks>block"`
 }
 
+// ThreadUsage tracks token and resource usage from inference calls.
 type ThreadUsage struct {
-	CacheReadTokens  int64 `json:"cache_read_tokens" xml:"cache_read_tokens,attr"`
-	CacheWriteTokens int64 `json:"cache_write_tokens" xml:"cache_write_tokens,attr"`
-	InputTokens      int64 `json:"input_tokens" xml:"input_tokens,attr"`
-	OutputTokens     int64 `json:"output_tokens" xml:"output_tokens,attr"`
-	WebSearches      int   `json:"web_searches" xml:"web_searches,attr"`
-	PageViews        int   `json:"page_views" xml:"page_views,attr"`
-}
-
-func (state *Thread) Debug() string {
-	dbg := fmt.Sprintf("Thread: Success=%v, Error=%q, Model=%q\n", state.Success, state.Error, state.Model)
-	for i, b := range state.Blocks {
-		dbg += fmt.Sprintf(" Block %d: ID=%q, Type=%q, Complete=%v: '%s'\n", i, b.ID, b.Type, b.Complete, b.Text)
-	}
-	return dbg
-}
-
-func (state *Thread) PrintDescription() {
-	for _, b := range state.Blocks {
-		println(b.Description())
-	}
+	CacheReadTokens  int64
+	CacheWriteTokens int64
+	InputTokens      int64
+	OutputTokens     int64
+	WebSearches      int
+	PageViews        int
 }
 
 func NewProviderState() *Thread {
