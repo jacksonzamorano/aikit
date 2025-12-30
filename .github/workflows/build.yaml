@@ -21,3 +21,9 @@ jobs:
       
       - name: Build
         run: go build -v .
+
+      - name: Run unit tests with coverage
+        run: go test -v -run TestUnit -coverprofile=coverage.out -covermode=atomic .
+
+      - name: Generate coverage report
+        run: go tool cover -func=coverage.out
