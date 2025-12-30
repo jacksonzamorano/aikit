@@ -31,8 +31,18 @@ type Thread struct {
 
 	Blocks []*ThreadBlock `json:"blocks" xml:"blocks>block"`
 
-	Updated         bool   `json:"-" xml:"-"`
+	updated         bool   `json:"-" xml:"-"`
 	CurrentProvider string `json:"-" xml:"-"`
+}
+
+// TakeUpdate returns the current update flag and resets it to false.
+// This is used to check if the thread was modified since the last check.
+func (s *Thread) TakeUpdate() bool {
+	if s.updated {
+		s.updated = false
+		return true
+	}
+	return false
 }
 
 // Snapshot represents a serializable snapshot of a Thread's conversation blocks.
@@ -116,7 +126,7 @@ func (s *Thread) Complete(id string) {
 		if s.Blocks[blockIdx].ID == id {
 			s.Blocks[blockIdx].Complete = true
 			if s.UpdateOnFinalize {
-				s.Updated = true
+				s.updated = true
 			}
 		}
 	}
@@ -173,7 +183,7 @@ func (s *Thread) Text(id string, text string) {
 		b = s.create(s.NewBlockId(InferenceBlockText), InferenceBlockText)
 	}
 	b.Text += text
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) Coalesce(id string, typ ThreadBlockType) *ThreadBlock {
 	searchIdx := len(s.Blocks) - 1
@@ -197,7 +207,7 @@ func (s *Thread) Cite(id string, citation string) {
 		b = s.create(s.NewBlockId(InferenceBlockText), InferenceBlockText)
 	}
 	b.Citations = append(b.Citations, citation)
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) Thinking(id string, text string) {
 	if text == "" {
@@ -208,7 +218,7 @@ func (s *Thread) Thinking(id string, text string) {
 		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
 	}
 	b.Text += text
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) ThinkingWithSignature(id string, thinking string, signature string) {
 	if thinking == "" && signature == "" {
@@ -220,7 +230,7 @@ func (s *Thread) ThinkingWithSignature(id string, thinking string, signature str
 	}
 	b.Text += thinking
 	b.Signature += signature
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) ThinkingSignature(id string, signature string) {
 	if signature == "" {
@@ -231,7 +241,7 @@ func (s *Thread) ThinkingSignature(id string, signature string) {
 		b = s.create(s.NewBlockId(InferenceBlockThinking), InferenceBlockThinking)
 	}
 	b.Signature += signature
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) EncryptedThinking(text string) {
 	b := s.create("", InferenceBlockEncryptedThinking)
@@ -251,17 +261,17 @@ func (s *Thread) ToolCall(id string, name string, arguments string) {
 			Name:      name,
 			Arguments: arguments,
 		}
-		s.Updated = true
+		s.updated = true
 	} else if b.ToolCall == nil {
 		b.ToolCall = &ThreadToolCall{
 			ID:        id,
 			Name:      name,
 			Arguments: arguments,
 		}
-		s.Updated = true
+		s.updated = true
 	} else if arguments != "" {
 		b.ToolCall.Arguments += arguments
-		s.Updated = true
+		s.updated = true
 	}
 }
 func (s *Thread) ToolCallWithThinking(id string, name string, arguments string, thinkingText string, thinkingSignature string) {
@@ -285,7 +295,7 @@ func (s *Thread) ToolCallWithThinking(id string, name string, arguments string, 
 	}
 	b.Text = thinkingText
 	b.Signature = thinkingSignature
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) ToolResult(toolCall *ThreadToolCall, output string) {
 	b := s.getType(toolCall.ID, InferenceBlockToolCall)
@@ -295,7 +305,7 @@ func (s *Thread) ToolResult(toolCall *ThreadToolCall, output string) {
 			Output:     output,
 		}
 		b.Complete = true
-		s.Updated = true
+		s.updated = true
 	}
 }
 func (s *Thread) findOrCreateIDBlock(id string, typ ThreadBlockType) *ThreadBlock {
@@ -318,7 +328,7 @@ func (s *Thread) WebSearch(id string) {
 	b.WebSearch = &ThreadWebSearch{
 		Results: []ThreadWebSearchResult{},
 	}
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) WebSearchQuery(id string, query string) {
 	b := s.findOrCreateIDBlock(id, InferenceBlockWebSearch)
@@ -335,7 +345,7 @@ func (s *Thread) CompleteWebSearch(id string) {
 	b := s.findOrCreateIDBlock(id, InferenceBlockWebSearch)
 	b.Complete = true
 	s.Result.WebSearches++
-	s.Updated = true
+	s.updated = true
 }
 func (s *Thread) ViewWebpage(id string) {
 	b := s.findOrCreateIDBlock(id, InferenceBlockViewWebpage)
@@ -346,5 +356,5 @@ func (s *Thread) ViewWebpageUrl(id string, url string) {
 	b.Text = url
 	b.Complete = true
 	s.Result.PageViews++
-	s.Updated = true
+	s.updated = true
 }

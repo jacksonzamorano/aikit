@@ -125,7 +125,7 @@ func TestUnit_Thread_NewBlockIdGeneration(t *testing.T) {
 func TestUnit_Thread_CompleteBlock(t *testing.T) {
 	thread := &Thread{Blocks: []*ThreadBlock{}, UpdateOnFinalize: true}
 	thread.Text("block_1", "content")
-	thread.Updated = false
+	thread.TakeUpdate() // Clear the update flag from Text()
 
 	if thread.Blocks[0].Complete {
 		t.Error("Block should not be complete initially")
@@ -136,7 +136,7 @@ func TestUnit_Thread_CompleteBlock(t *testing.T) {
 	if !thread.Blocks[0].Complete {
 		t.Error("Block should be complete after Complete()")
 	}
-	if !thread.Updated {
+	if !thread.TakeUpdate() {
 		t.Error("Updated flag should be set when UpdateOnFinalize is true")
 	}
 }
@@ -317,5 +317,152 @@ func TestUnit_Thread_CoalesceBreaksOnDifferentBlockType(t *testing.T) {
 	// First block should NOT be continued since the following block is a tool call
 	if thread.Blocks[0].Continued {
 		t.Error("First text block should NOT have Continued=true when followed by tool call")
+	}
+}
+
+// =============================================================================
+// UPDATE FLAG TESTS
+// =============================================================================
+
+// TestUnit_Thread_MutationMethodsSetUpdated verifies that all mutation methods
+// that should trigger a streaming update properly set the updated flag.
+//
+// IMPORTANT: When adding new mutation methods that modify thread state during
+// streaming, add them to this test to ensure the updated flag is set.
+func TestUnit_Thread_MutationMethodsSetUpdated(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(thread *Thread)
+	}{
+		{
+			name: "Text",
+			mutate: func(thread *Thread) {
+				thread.Text("id", "hello")
+			},
+		},
+		{
+			name: "Cite",
+			mutate: func(thread *Thread) {
+				thread.Cite("id", "citation")
+			},
+		},
+		{
+			name: "Thinking",
+			mutate: func(thread *Thread) {
+				thread.Thinking("id", "thinking")
+			},
+		},
+		{
+			name: "ThinkingWithSignature",
+			mutate: func(thread *Thread) {
+				thread.ThinkingWithSignature("id", "thinking", "sig")
+			},
+		},
+		{
+			name: "ThinkingSignature",
+			mutate: func(thread *Thread) {
+				thread.ThinkingSignature("id", "sig")
+			},
+		},
+		{
+			name: "ToolCall_new",
+			mutate: func(thread *Thread) {
+				thread.ToolCall("id", "tool", "{}")
+			},
+		},
+		{
+			name: "ToolCall_append_args",
+			mutate: func(thread *Thread) {
+				thread.ToolCall("id", "tool", "")
+				thread.TakeUpdate() // clear
+				thread.ToolCall("id", "", `{"arg": 1}`)
+			},
+		},
+		{
+			name: "ToolCallWithThinking",
+			mutate: func(thread *Thread) {
+				thread.ToolCallWithThinking("id", "tool", "{}", "thinking", "sig")
+			},
+		},
+		{
+			name: "ToolResult",
+			mutate: func(thread *Thread) {
+				thread.ToolCall("id", "tool", "{}")
+				thread.TakeUpdate() // clear
+				thread.ToolResult(thread.Blocks[0].ToolCall, "result")
+			},
+		},
+		{
+			name: "WebSearch",
+			mutate: func(thread *Thread) {
+				thread.WebSearch("id")
+			},
+		},
+		{
+			name: "CompleteWebSearch",
+			mutate: func(thread *Thread) {
+				thread.WebSearch("id")
+				thread.TakeUpdate() // clear
+				thread.CompleteWebSearch("id")
+			},
+		},
+		{
+			name: "ViewWebpageUrl",
+			mutate: func(thread *Thread) {
+				thread.ViewWebpage("id")
+				thread.TakeUpdate() // clear (if any)
+				thread.ViewWebpageUrl("id", "https://example.com")
+			},
+		},
+		{
+			name: "Complete_with_UpdateOnFinalize",
+			mutate: func(thread *Thread) {
+				thread.UpdateOnFinalize = true
+				thread.Text("id", "content")
+				thread.TakeUpdate() // clear
+				thread.Complete("id")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thread := &Thread{Blocks: []*ThreadBlock{}}
+			tt.mutate(thread)
+			if !thread.TakeUpdate() {
+				t.Errorf("%s should set updated flag", tt.name)
+			}
+		})
+	}
+}
+
+// TestUnit_Thread_TakeUpdate verifies TakeUpdate behavior.
+func TestUnit_Thread_TakeUpdate(t *testing.T) {
+	thread := &Thread{Blocks: []*ThreadBlock{}}
+
+	// Initially false
+	if thread.TakeUpdate() {
+		t.Error("TakeUpdate should return false on fresh thread")
+	}
+
+	// After mutation, returns true
+	thread.Text("id", "hello")
+	if !thread.TakeUpdate() {
+		t.Error("TakeUpdate should return true after mutation")
+	}
+
+	// After taking, returns false
+	if thread.TakeUpdate() {
+		t.Error("TakeUpdate should return false after being taken")
+	}
+
+	// Multiple mutations, single take
+	thread.Text("id", " world")
+	thread.Thinking("id2", "hmm")
+	if !thread.TakeUpdate() {
+		t.Error("TakeUpdate should return true after multiple mutations")
+	}
+	if thread.TakeUpdate() {
+		t.Error("TakeUpdate should return false after being taken")
 	}
 }
