@@ -150,9 +150,8 @@ func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 					log.Printf("[Session] SSE Event: %s", string(ev.data))
 				}
 				result := s.Provider.OnChunk(ev.data, s.Thread)
-				if s.Thread.Updated {
+				if s.Thread.TakeUpdate() {
 					onPartial(s.Thread)
-					s.Thread.Updated = false
 				}
 				if result.Error != nil {
 					return false, result.Error
