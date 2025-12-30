@@ -182,7 +182,7 @@ provider := aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY"))
 session := provider.Session()
 
 session.Thread.Model = "claude-sonnet-4-20250514"
-session.Thread.ReasoningEffort = "1024" // Token budget for thinking
+session.Thread.Reasoning.Budget = 1024 // Token budget for thinking
 session.Thread.Input("Solve this step by step: What is 15% of 340?")
 
 result := session.Stream(func(thread *aikit.Thread) {

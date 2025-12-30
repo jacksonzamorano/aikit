@@ -11,7 +11,7 @@ func TestThread_JSONRoundTrip(t *testing.T) {
 		Model:           "claude-3-opus",
 		ThreadId:        "thread_123",
 		Success:         true,
-		ReasoningEffort: "high",
+		Reasoning:       ReasoningConfig{Effort: "high"},
 		Tools: map[string]ToolDefinition{
 			"search": {
 				Description: "Search the web",

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 )
 
 type messagesLastToolCall struct {
@@ -70,13 +69,10 @@ func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 		Stream:    true,
 	}
 
-	if len(thread.ReasoningEffort) > 0 {
-		if parsed, err := strconv.Atoi(thread.ReasoningEffort); err == nil {
-			budgetTokens := int64(parsed)
-			p.request.Thinking = &MessagesThinking{
-				BudgetTokens: budgetTokens,
-				Type:         "enabled",
-			}
+	if thread.Reasoning.Budget > 0 {
+		p.request.Thinking = &MessagesThinking{
+			BudgetTokens: int64(thread.Reasoning.Budget),
+			Type:         "enabled",
 		}
 	}
 }

@@ -25,20 +25,20 @@ var testDebugEnabled = false
 // =============================================================================
 
 type integrationTestConfig struct {
-	Provider        aikit.ProviderConfig
-	Model           string
-	ReasoningEffort *string
-	TestName        string
+	Provider  aikit.ProviderConfig
+	Model     string
+	Reasoning *aikit.ReasoningConfig
+	TestName  string
 }
 
 type snapshotTestConfig struct {
-	Provider1        aikit.ProviderConfig
-	Model1           string
-	ReasoningEffort1 *string
-	Provider2        aikit.ProviderConfig
-	Model2           string
-	ReasoningEffort2 *string
-	TestName         string
+	Provider1  aikit.ProviderConfig
+	Model1     string
+	Reasoning1 *aikit.ReasoningConfig
+	Provider2  aikit.ProviderConfig
+	Model2     string
+	Reasoning2 *aikit.ReasoningConfig
+	TestName   string
 }
 
 // Memory tools for snapshot tests - allows data dependency between phases
@@ -95,8 +95,8 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 			},
 		},
 	}
-	if cfg.ReasoningEffort != nil {
-		session.Thread.ReasoningEffort = *cfg.ReasoningEffort
+	if cfg.Reasoning != nil {
+		session.Thread.Reasoning = *cfg.Reasoning
 	}
 	session.Thread.CoalesceTextBlocks = true
 	session.Thread.HandleToolFunction = func(name string, args string) string {
@@ -145,7 +145,7 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	validateBlockIDUniqueness(t, result)
 	validateToolArguments(t, result)
 	validateToolFunctionExecution(t, toolFunctionCalled, result)
-	validateReasoningBlocks(t, cfg.ReasoningEffort, result)
+	validateReasoningBlocks(t, cfg.Reasoning, result)
 }
 
 // =============================================================================
@@ -163,8 +163,8 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	session.Thread.CoalesceTextBlocks = true
 	session.Thread.System("You are a helpful assistant. Always check for the most up-to-date information.")
 	session.Thread.Input("What's new in the newest version of React? Keep your answer concise.")
-	if cfg.ReasoningEffort != nil {
-		session.Thread.ReasoningEffort = *cfg.ReasoningEffort
+	if cfg.Reasoning != nil {
+		session.Thread.Reasoning = *cfg.Reasoning
 	}
 	session.Debug = testDebugEnabled
 
@@ -188,7 +188,7 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	validateBlockIntegrity(t, result)
 	validateBlockIDUniqueness(t, result)
 	validateWebSearchResults(t, result)
-	validateReasoningBlocks(t, cfg.ReasoningEffort, result)
+	validateReasoningBlocks(t, cfg.Reasoning, result)
 }
 
 // =============================================================================
@@ -213,8 +213,8 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	session.Thread.System("You are a helpful assistant that identifies images.")
 	session.Thread.InputImage(imageData, "image/jpeg")
 	session.Thread.Input("What famous video is this frame from?")
-	if cfg.ReasoningEffort != nil {
-		session.Thread.ReasoningEffort = *cfg.ReasoningEffort
+	if cfg.Reasoning != nil {
+		session.Thread.Reasoning = *cfg.Reasoning
 	}
 	session.Debug = testDebugEnabled
 
@@ -240,7 +240,7 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	validateBlockIntegrity(t, result)
 	validateBlockIDUniqueness(t, result)
 	validateImageInputResponse(t, result)
-	validateReasoningBlocks(t, cfg.ReasoningEffort, result)
+	validateReasoningBlocks(t, cfg.Reasoning, result)
 }
 
 // =============================================================================
@@ -284,8 +284,8 @@ func runSnapshotRestoreValidation(t *testing.T, cfg snapshotTestConfig) {
 	// ==========================================================================
 	session1 := cfg.Provider1.Session()
 	session1.Thread.Model = cfg.Model1
-	if cfg.ReasoningEffort1 != nil {
-		session1.Thread.ReasoningEffort = *cfg.ReasoningEffort1
+	if cfg.Reasoning1 != nil {
+		session1.Thread.Reasoning = *cfg.Reasoning1
 	}
 	session1.Thread.Tools = memoryTools
 	session1.Thread.HandleToolFunction = handleMemoryTool
@@ -334,8 +334,8 @@ func runSnapshotRestoreValidation(t *testing.T, cfg snapshotTestConfig) {
 	// ==========================================================================
 	session2 := cfg.Provider2.Session()
 	session2.Thread.Model = cfg.Model2
-	if cfg.ReasoningEffort2 != nil {
-		session2.Thread.ReasoningEffort = *cfg.ReasoningEffort2
+	if cfg.Reasoning2 != nil {
+		session2.Thread.Reasoning = *cfg.Reasoning2
 	}
 	session2.Thread.Restore(&restoredSnapshot)
 	session2.Thread.Tools = memoryTools
@@ -472,9 +472,9 @@ func validateWebSearchResults(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateReasoningBlocks(t *testing.T, reasoningEffort *string, result *aikit.Thread) {
+func validateReasoningBlocks(t *testing.T, reasoning *aikit.ReasoningConfig, result *aikit.Thread) {
 	t.Helper()
-	if reasoningEffort == nil || *reasoningEffort == "" {
+	if reasoning == nil || (reasoning.Effort == "" && reasoning.Budget == 0) {
 		return
 	}
 	hasThinking := false
@@ -485,7 +485,7 @@ func validateReasoningBlocks(t *testing.T, reasoningEffort *string, result *aiki
 		}
 	}
 	if !hasThinking {
-		t.Logf("Note: Reasoning effort set to %q but no thinking blocks found", *reasoningEffort)
+		t.Logf("Note: Reasoning configured but no thinking blocks found")
 	}
 }
 
@@ -585,13 +585,13 @@ func writeTestRun(name string, results string) {
 // ANTHROPIC (MESSAGES API) INTEGRATION TESTS
 // =============================================================================
 
-var anthropicReasoningEffort = "1024"
+var anthropicReasoning = aikit.ReasoningConfig{Budget: 1024}
 
 func TestIntegration_Anthropic_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
 		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
 		Model:           "claude-haiku-4-5-20251001",
-		ReasoningEffort: &anthropicReasoningEffort,
+		Reasoning: &anthropicReasoning,
 		TestName:        "anthropic",
 	})
 }
@@ -600,7 +600,7 @@ func TestIntegration_Anthropic_WebSearch(t *testing.T) {
 	runWebSearchValidation(t, integrationTestConfig{
 		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
 		Model:           "claude-haiku-4-5-20251001",
-		ReasoningEffort: &anthropicReasoningEffort,
+		Reasoning: &anthropicReasoning,
 		TestName:        "anthropic",
 	})
 }
@@ -609,7 +609,7 @@ func TestIntegration_Anthropic_ImageInput(t *testing.T) {
 	runImageInputValidation(t, integrationTestConfig{
 		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
 		Model:           "claude-haiku-4-5-20251001",
-		ReasoningEffort: &anthropicReasoningEffort,
+		Reasoning: &anthropicReasoning,
 		TestName:        "anthropic",
 	})
 }
@@ -618,13 +618,13 @@ func TestIntegration_Anthropic_ImageInput(t *testing.T) {
 // OPENAI (RESPONSES API) INTEGRATION TESTS
 // =============================================================================
 
-var openaiReasoningEffort = "low"
+var openaiReasoning = aikit.ReasoningConfig{Effort: "low"}
 
 func TestIntegration_OpenAI_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
 		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
 		Model:           "gpt-5-nano",
-		ReasoningEffort: &openaiReasoningEffort,
+		Reasoning: &openaiReasoning,
 		TestName:        "openai",
 	})
 }
@@ -633,7 +633,7 @@ func TestIntegration_OpenAI_WebSearch(t *testing.T) {
 	runWebSearchValidation(t, integrationTestConfig{
 		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
 		Model:           "gpt-5-nano",
-		ReasoningEffort: &openaiReasoningEffort,
+		Reasoning: &openaiReasoning,
 		TestName:        "openai",
 	})
 }
@@ -642,7 +642,7 @@ func TestIntegration_OpenAI_ImageInput(t *testing.T) {
 	runImageInputValidation(t, integrationTestConfig{
 		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
 		Model:           "gpt-5-nano",
-		ReasoningEffort: &openaiReasoningEffort,
+		Reasoning: &openaiReasoning,
 		TestName:        "openai",
 	})
 }
@@ -651,13 +651,13 @@ func TestIntegration_OpenAI_ImageInput(t *testing.T) {
 // GOOGLE (AI STUDIO API) INTEGRATION TESTS
 // =============================================================================
 
-var googleReasoningEffort = "1024"
+var googleReasoning = aikit.ReasoningConfig{Budget: 1024}
 
 func TestIntegration_Google_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
 		Provider:        aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")),
 		Model:           "gemini-3-flash-preview",
-		ReasoningEffort: &googleReasoningEffort,
+		Reasoning: &googleReasoning,
 		TestName:        "google",
 	})
 }
@@ -678,13 +678,13 @@ func TestIntegration_Groq_ToolCall(t *testing.T) {
 // FIREWORKS (COMPLETIONS API) INTEGRATION TESTS
 // =============================================================================
 
-var fireworksReasoningEffort = "low"
+var fireworksReasoning = aikit.ReasoningConfig{Effort: "low"}
 
 func TestIntegration_Fireworks_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
 		Provider:        aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")),
 		Model:           "accounts/fireworks/models/gpt-oss-20b",
-		ReasoningEffort: &fireworksReasoningEffort,
+		Reasoning: &fireworksReasoning,
 		TestName:        "fireworks",
 	})
 }
@@ -717,10 +717,10 @@ func TestIntegration_Snapshot_SameProvider_Anthropic(t *testing.T) {
 	runSnapshotRestoreValidation(t, snapshotTestConfig{
 		Provider1:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
 		Model1:           "claude-haiku-4-5-20251001",
-		ReasoningEffort1: &anthropicReasoningEffort,
-		Provider2:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model2:           "claude-haiku-4-5-20251001",
-		ReasoningEffort2: &anthropicReasoningEffort,
+		Reasoning1: &anthropicReasoning,
+		Provider2:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model2:     "claude-haiku-4-5-20251001",
+		Reasoning2: &anthropicReasoning,
 		TestName:         "snapshot_anthropic_to_anthropic",
 	})
 }
@@ -732,10 +732,10 @@ func TestIntegration_Snapshot_CrossProvider_Anthropic_OpenAI(t *testing.T) {
 	runSnapshotRestoreValidation(t, snapshotTestConfig{
 		Provider1:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
 		Model1:           "claude-haiku-4-5-20251001",
-		ReasoningEffort1: &anthropicReasoningEffort,
-		Provider2:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model2:           "gpt-5-nano",
-		ReasoningEffort2: &openaiReasoningEffort,
+		Reasoning1: &anthropicReasoning,
+		Provider2:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model2:     "gpt-5-nano",
+		Reasoning2: &openaiReasoning,
 		TestName:         "snapshot_anthropic_to_openai",
 	})
 }

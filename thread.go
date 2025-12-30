@@ -5,8 +5,16 @@ import (
 	"fmt"
 )
 
+// ReasoningConfig configures reasoning behavior for the thread.
+// Effort is for string-based providers (e.g., OpenAI's "low"/"medium"/"high").
+// Budget is for integer-based token budgets.
+type ReasoningConfig struct {
+	Effort string `json:"effort,omitempty" xml:"effort,attr,omitempty"`
+	Budget int    `json:"budget,omitempty" xml:"budget,attr,omitempty"`
+}
+
 type Thread struct {
-	ReasoningEffort    string                                `json:"reasoning_effort" xml:"reasoning_effort,attr"`
+	Reasoning          ReasoningConfig                       `json:"reasoning" xml:"reasoning"`
 	Tools              map[string]ToolDefinition             `json:"tools" xml:"tools"`
 	MaxWebSearches     int                                   `json:"max_web_searches" xml:"max_web_searches,attr"`
 	WebFetchEnabled    bool                                  `json:"web_fetch_enabled" xml:"web_fetch_enabled,attr"`

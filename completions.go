@@ -44,7 +44,7 @@ func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
 		StreamOptions: map[string]any{
 			"include_usage": true,
 		},
-		ReasoningEffort: thread.ReasoningEffort,
+		ReasoningEffort: thread.Reasoning.Effort,
 	}
 }
 
