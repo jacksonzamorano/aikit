@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestSnapshot_FullRoundTrip(t *testing.T) {
+func TestUnit_Snapshot_FullRoundTrip(t *testing.T) {
 	thread := &Thread{
 		Model:    "claude-3-opus",
 		ThreadId: "thread_123",
@@ -54,7 +54,7 @@ func TestSnapshot_FullRoundTrip(t *testing.T) {
 	}
 }
 
-func TestThread_XMLRoundTrip(t *testing.T) {
+func TestUnit_Thread_XMLRoundTrip(t *testing.T) {
 	// Note: XML serialization does not fully support Thread because
 	// Go's xml package cannot marshal map[string]ToolDefinition.
 	// This test verifies that ThreadBlock XML serialization works.
@@ -92,7 +92,7 @@ func TestThread_XMLRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSnapshot_ContinuedBlocks(t *testing.T) {
+func TestUnit_Snapshot_ContinuedBlocks(t *testing.T) {
 	thread := &Thread{
 		CoalesceTextBlocks: true,
 		Blocks:             []*ThreadBlock{},
@@ -125,7 +125,7 @@ func TestSnapshot_ContinuedBlocks(t *testing.T) {
 	}
 }
 
-func TestSnapshot_ToolCallWithResult(t *testing.T) {
+func TestUnit_Snapshot_ToolCallWithResult(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -165,7 +165,7 @@ func TestSnapshot_ToolCallWithResult(t *testing.T) {
 	}
 }
 
-func TestSnapshot_IncompleteToolCalls(t *testing.T) {
+func TestUnit_Snapshot_IncompleteToolCalls(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -199,7 +199,7 @@ func TestSnapshot_IncompleteToolCalls(t *testing.T) {
 	}
 }
 
-func TestThread_SetError(t *testing.T) {
+func TestUnit_Thread_SetError(t *testing.T) {
 	thread := &Thread{}
 
 	err := &AIError{
@@ -222,7 +222,7 @@ func TestThread_SetError(t *testing.T) {
 	// Callers should handle error state separately if persistence is needed.
 }
 
-func TestSnapshot_ImageSerialization(t *testing.T) {
+func TestUnit_Snapshot_ImageSerialization(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -260,7 +260,7 @@ func TestSnapshot_ImageSerialization(t *testing.T) {
 	}
 }
 
-func TestSnapshot_WebSearchSerialization(t *testing.T) {
+func TestUnit_Snapshot_WebSearchSerialization(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -299,7 +299,7 @@ func TestSnapshot_WebSearchSerialization(t *testing.T) {
 	}
 }
 
-func TestThread_SnapshotRestore(t *testing.T) {
+func TestUnit_Thread_SnapshotRestore(t *testing.T) {
 	thread := &Thread{
 		Model:    "claude-3-opus",
 		ThreadId: "thread_123",
@@ -340,7 +340,7 @@ func TestThread_SnapshotRestore(t *testing.T) {
 	}
 }
 
-func TestSnapshot_JSONRoundTrip(t *testing.T) {
+func TestUnit_Snapshot_JSONRoundTrip(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -368,7 +368,7 @@ func TestSnapshot_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSnapshot_ThinkingProviderID(t *testing.T) {
+func TestUnit_Snapshot_ThinkingProviderID(t *testing.T) {
 	thread := &Thread{
 		CurrentProvider: "messages.anthropic",
 		Blocks:          []*ThreadBlock{},
@@ -396,7 +396,7 @@ func TestSnapshot_ThinkingProviderID(t *testing.T) {
 	}
 }
 
-func TestThread_EncryptedThinkingProviderID(t *testing.T) {
+func TestUnit_Thread_EncryptedThinkingProviderID(t *testing.T) {
 	thread := &Thread{
 		CurrentProvider: "messages.anthropic",
 		Blocks:          []*ThreadBlock{},
