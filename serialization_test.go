@@ -6,51 +6,51 @@ import (
 	"testing"
 )
 
-func TestThread_JSONRoundTrip(t *testing.T) {
+func TestSnapshot_FullRoundTrip(t *testing.T) {
 	thread := &Thread{
-		Model:           "claude-3-opus",
-		ThreadId:        "thread_123",
-		Success:         true,
-		Reasoning:       ReasoningConfig{Effort: "high"},
-		Tools: map[string]ToolDefinition{
-			"search": {
-				Description: "Search the web",
-				Parameters: &ToolJsonSchema{
-					Type: "object",
-				},
-			},
-		},
-		Blocks: []*ThreadBlock{},
+		Model:    "claude-3-opus",
+		ThreadId: "thread_123",
+		Blocks:   []*ThreadBlock{},
 	}
 	thread.System("You are a helpful assistant.")
 	thread.Input("Hello")
 	thread.Text("text_1", "Hi there!")
 	thread.Complete("text_1")
 
-	// Serialize
-	data, err := json.Marshal(thread)
+	// Create snapshot and serialize
+	snapshot := thread.Snapshot()
+	data, err := json.Marshal(snapshot)
 	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
+		t.Fatalf("Failed to marshal snapshot: %v", err)
 	}
 
 	// Deserialize
-	var restored Thread
-	if err := json.Unmarshal(data, &restored); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
+	var restoredSnapshot Snapshot
+	if err := json.Unmarshal(data, &restoredSnapshot); err != nil {
+		t.Fatalf("Failed to unmarshal snapshot: %v", err)
 	}
 
-	// Verify
-	if restored.Model != thread.Model {
-		t.Errorf("Model mismatch: got %q, want %q", restored.Model, thread.Model)
+	// Restore to a new thread
+	newThread := &Thread{
+		Model:    "claude-3-opus", // Configuration must be re-applied
+		ThreadId: "thread_123",
+		Blocks:   []*ThreadBlock{},
 	}
-	if restored.ThreadId != thread.ThreadId {
-		t.Errorf("ThreadId mismatch: got %q, want %q", restored.ThreadId, thread.ThreadId)
+	newThread.Restore(&restoredSnapshot)
+
+	// Verify blocks were restored
+	if len(newThread.Blocks) != len(thread.Blocks) {
+		t.Errorf("Block count mismatch: got %d, want %d", len(newThread.Blocks), len(thread.Blocks))
 	}
-	if len(restored.Blocks) != len(thread.Blocks) {
-		t.Errorf("Block count mismatch: got %d, want %d", len(restored.Blocks), len(thread.Blocks))
-	}
-	if len(restored.Tools) != len(thread.Tools) {
-		t.Errorf("Tools count mismatch: got %d, want %d", len(restored.Tools), len(thread.Tools))
+
+	// Verify block content
+	for i, b := range newThread.Blocks {
+		if b.Type != thread.Blocks[i].Type {
+			t.Errorf("Block %d type mismatch: got %q, want %q", i, b.Type, thread.Blocks[i].Type)
+		}
+		if b.Text != thread.Blocks[i].Text {
+			t.Errorf("Block %d text mismatch: got %q, want %q", i, b.Text, thread.Blocks[i].Text)
+		}
 	}
 }
 
@@ -92,7 +92,7 @@ func TestThread_XMLRoundTrip(t *testing.T) {
 	}
 }
 
-func TestThread_ContinuedBlocks(t *testing.T) {
+func TestSnapshot_ContinuedBlocks(t *testing.T) {
 	thread := &Thread{
 		CoalesceTextBlocks: true,
 		Blocks:             []*ThreadBlock{},
@@ -113,9 +113,10 @@ func TestThread_ContinuedBlocks(t *testing.T) {
 		t.Error("First block should have Continued=true")
 	}
 
-	// Serialize and deserialize
-	data, _ := json.Marshal(thread)
-	var restored Thread
+	// Serialize snapshot and deserialize
+	snapshot := thread.Snapshot()
+	data, _ := json.Marshal(snapshot)
+	var restored Snapshot
 	json.Unmarshal(data, &restored)
 
 	// Verify Continued is preserved
@@ -124,7 +125,7 @@ func TestThread_ContinuedBlocks(t *testing.T) {
 	}
 }
 
-func TestThread_ToolCallWithResult(t *testing.T) {
+func TestSnapshot_ToolCallWithResult(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -138,10 +139,14 @@ func TestThread_ToolCallWithResult(t *testing.T) {
 		t.Errorf("Expected 0 incomplete tool calls, got %d", thread.IncompleteToolCalls())
 	}
 
-	// Serialize and deserialize
-	data, _ := json.Marshal(thread)
-	var restored Thread
-	json.Unmarshal(data, &restored)
+	// Serialize snapshot and restore
+	snapshot := thread.Snapshot()
+	data, _ := json.Marshal(snapshot)
+	var restoredSnapshot Snapshot
+	json.Unmarshal(data, &restoredSnapshot)
+
+	restored := &Thread{Blocks: []*ThreadBlock{}}
+	restored.Restore(&restoredSnapshot)
 
 	// Verify tool result is preserved
 	if len(restored.Blocks) != 1 {
@@ -160,7 +165,7 @@ func TestThread_ToolCallWithResult(t *testing.T) {
 	}
 }
 
-func TestThread_IncompleteToolCalls(t *testing.T) {
+func TestSnapshot_IncompleteToolCalls(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -172,10 +177,14 @@ func TestThread_IncompleteToolCalls(t *testing.T) {
 		t.Errorf("Expected 1 incomplete tool call, got %d", thread.IncompleteToolCalls())
 	}
 
-	// Serialize and deserialize
-	data, _ := json.Marshal(thread)
-	var restored Thread
-	json.Unmarshal(data, &restored)
+	// Serialize snapshot and restore
+	snapshot := thread.Snapshot()
+	data, _ := json.Marshal(snapshot)
+	var restoredSnapshot Snapshot
+	json.Unmarshal(data, &restoredSnapshot)
+
+	restored := &Thread{Blocks: []*ThreadBlock{}}
+	restored.Restore(&restoredSnapshot)
 
 	// Verify incomplete count is correct after restore
 	if restored.IncompleteToolCalls() != 1 {
@@ -209,34 +218,32 @@ func TestThread_SetError(t *testing.T) {
 		t.Errorf("Error mismatch: got %q, want %q", thread.Error, expectedError)
 	}
 
-	// Verify error serializes
-	data, _ := json.Marshal(thread)
-	var restored Thread
-	json.Unmarshal(data, &restored)
-
-	if restored.Error != expectedError {
-		t.Errorf("Error not preserved: got %q", restored.Error)
-	}
+	// Note: Thread.Error is execution state and is NOT serialized via Snapshot.
+	// Callers should handle error state separately if persistence is needed.
 }
 
-func TestThread_ImageSerialization(t *testing.T) {
+func TestSnapshot_ImageSerialization(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
 
 	thread.InputImageBase64("aGVsbG8gd29ybGQ=", "image/png")
 
-	// Serialize
-	data, err := json.Marshal(thread)
+	// Serialize snapshot
+	snapshot := thread.Snapshot()
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("Failed to marshal: %v", err)
 	}
 
-	// Deserialize
-	var restored Thread
-	if err := json.Unmarshal(data, &restored); err != nil {
+	// Deserialize and restore
+	var restoredSnapshot Snapshot
+	if err := json.Unmarshal(data, &restoredSnapshot); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
+
+	restored := &Thread{Blocks: []*ThreadBlock{}}
+	restored.Restore(&restoredSnapshot)
 
 	// Verify
 	if len(restored.Blocks) != 1 {
@@ -253,7 +260,7 @@ func TestThread_ImageSerialization(t *testing.T) {
 	}
 }
 
-func TestThread_WebSearchSerialization(t *testing.T) {
+func TestSnapshot_WebSearchSerialization(t *testing.T) {
 	thread := &Thread{
 		Blocks: []*ThreadBlock{},
 	}
@@ -264,17 +271,21 @@ func TestThread_WebSearchSerialization(t *testing.T) {
 		URL:   "https://example.com",
 	})
 
-	// Serialize
-	data, err := json.Marshal(thread)
+	// Serialize snapshot
+	snapshot := thread.Snapshot()
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("Failed to marshal: %v", err)
 	}
 
-	// Deserialize
-	var restored Thread
-	if err := json.Unmarshal(data, &restored); err != nil {
+	// Deserialize and restore
+	var restoredSnapshot Snapshot
+	if err := json.Unmarshal(data, &restoredSnapshot); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
+
+	restored := &Thread{Blocks: []*ThreadBlock{}}
+	restored.Restore(&restoredSnapshot)
 
 	// Verify
 	if len(restored.Blocks) != 1 {
@@ -357,7 +368,7 @@ func TestSnapshot_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestThread_ThinkingProviderID(t *testing.T) {
+func TestSnapshot_ThinkingProviderID(t *testing.T) {
 	thread := &Thread{
 		CurrentProvider: "messages.anthropic",
 		Blocks:          []*ThreadBlock{},
@@ -374,13 +385,14 @@ func TestThread_ThinkingProviderID(t *testing.T) {
 		t.Errorf("ProviderID mismatch: got %q, want %q", thread.Blocks[0].ProviderID, "messages.anthropic")
 	}
 
-	// Serialize and verify ProviderID is preserved
-	data, _ := json.Marshal(thread)
-	var restored Thread
-	json.Unmarshal(data, &restored)
+	// Serialize snapshot and verify ProviderID is preserved
+	snapshot := thread.Snapshot()
+	data, _ := json.Marshal(snapshot)
+	var restoredSnapshot Snapshot
+	json.Unmarshal(data, &restoredSnapshot)
 
-	if restored.Blocks[0].ProviderID != "messages.anthropic" {
-		t.Errorf("ProviderID not preserved: got %q", restored.Blocks[0].ProviderID)
+	if restoredSnapshot.Blocks[0].ProviderID != "messages.anthropic" {
+		t.Errorf("ProviderID not preserved: got %q", restoredSnapshot.Blocks[0].ProviderID)
 	}
 }
 
