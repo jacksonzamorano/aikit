@@ -45,9 +45,9 @@ type snapshotTestConfig struct {
 var memoryTools = map[string]aikit.ToolDefinition{
 	"memory_store": {
 		Description: "Store a value in memory with a key",
-		Parameters: &aikit.ToolJsonSchema{
+		Parameters: &aikit.JsonSchema{
 			Type: "object",
-			Properties: &map[string]*aikit.ToolJsonSchema{
+			Properties: &map[string]*aikit.JsonSchema{
 				"key":   {Type: "string", Description: "The key to store the value under"},
 				"value": {Type: "string", Description: "The value to store"},
 			},
@@ -56,9 +56,9 @@ var memoryTools = map[string]aikit.ToolDefinition{
 	},
 	"memory_get": {
 		Description: "Retrieve a value from memory by key",
-		Parameters: &aikit.ToolJsonSchema{
+		Parameters: &aikit.JsonSchema{
 			Type: "object",
-			Properties: &map[string]*aikit.ToolJsonSchema{
+			Properties: &map[string]*aikit.JsonSchema{
 				"key": {Type: "string", Description: "The key to retrieve"},
 			},
 			Required: []string{"key"},
@@ -83,9 +83,9 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	session.Thread.Tools = map[string]aikit.ToolDefinition{
 		"get_time": {
 			Description: "Get the current time in ISO 8601 format for a specific timezone.",
-			Parameters: &aikit.ToolJsonSchema{
+			Parameters: &aikit.JsonSchema{
 				Type: "object",
-				Properties: &map[string]*aikit.ToolJsonSchema{
+				Properties: &map[string]*aikit.JsonSchema{
 					"timezone": {
 						Type:        "string",
 						Description: "The timezone to get the time for (e.g., 'UTC', 'America/New_York', 'Europe/London').",
@@ -240,6 +240,46 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	validateBlockIntegrity(t, result)
 	validateBlockIDUniqueness(t, result)
 	validateImageInputResponse(t, result)
+	validateReasoningBlocks(t, cfg.Reasoning, result)
+}
+
+// =============================================================================
+// SHARED VALIDATION RUNNER - STRUCTURED OUTPUT
+// =============================================================================
+
+func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
+	t.Helper()
+
+	var lastHash string
+
+	session := cfg.Provider.Session()
+	session.Thread.Model = cfg.Model
+	session.Thread.System("Return only JSON that matches the provided schema.")
+	session.Thread.Input("Return the number 2+2 as a string value.")
+	session.Thread.StructuredOutputSchema = structuredOutputSchema()
+	if cfg.Reasoning != nil {
+		session.Thread.Reasoning = *cfg.Reasoning
+	}
+	session.Thread.CoalesceTextBlocks = true
+	session.Debug = testDebugEnabled
+
+	result := session.Stream(func(result *aikit.Thread) {
+		bytes, _ := json.Marshal(result.Blocks)
+		hash := sha256.Sum256(bytes)
+		currentHash := hex.EncodeToString(hash[:])
+		if currentHash == lastHash && lastHash != "" {
+			t.Errorf("Streaming callback received duplicate data")
+		}
+		lastHash = currentHash
+	})
+	all := snapshotResult(*result)
+
+	writeTestRun(cfg.TestName+"_structured", all)
+
+	validateBasicResults(t, result)
+	validateBlockIntegrity(t, result)
+	validateBlockIDUniqueness(t, result)
+	validateStructuredOutputFormat(t, result)
 	validateReasoningBlocks(t, cfg.Reasoning, result)
 }
 
@@ -503,6 +543,48 @@ func validateImageInputResponse(t *testing.T, result *aikit.Thread) {
 	}
 }
 
+func validateStructuredOutputFormat(t *testing.T, result *aikit.Thread) {
+	t.Helper()
+
+	var output strings.Builder
+	for _, b := range result.Blocks {
+		if b.Type == aikit.InferenceBlockText {
+			output.WriteString(b.Text)
+		}
+	}
+
+	trimmed := strings.TrimSpace(output.String())
+	if trimmed == "" {
+		t.Fatalf("Structured output is empty")
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		t.Fatalf("Expected JSON output, got %q", trimmed)
+	}
+	value, ok := payload["answer"]
+	if !ok {
+		t.Fatalf("Structured output missing 'answer' field")
+	}
+	answer, ok := value.(string)
+	if !ok {
+		t.Fatalf("Structured output 'answer' should be string, got %T", value)
+	}
+	if strings.TrimSpace(answer) == "" {
+		t.Fatalf("Structured output 'answer' is empty")
+	}
+}
+
+func structuredOutputSchema() *aikit.JsonSchema {
+	return &aikit.JsonSchema{
+		Type: "object",
+		Properties: &map[string]*aikit.JsonSchema{
+			"answer": {Type: "string"},
+		},
+		Required: []string{"answer"},
+	}
+}
+
 func validateSnapshotIntegrity(t *testing.T, original *aikit.Snapshot, restored *aikit.Snapshot) {
 	t.Helper()
 	if len(original.Blocks) != len(restored.Blocks) {
@@ -589,28 +671,37 @@ var anthropicReasoning = aikit.ReasoningConfig{Budget: 1024}
 
 func TestIntegration_Anthropic_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
-		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:           "claude-haiku-4-5-20251001",
+		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model:     "claude-haiku-4-5-20251001",
 		Reasoning: &anthropicReasoning,
-		TestName:        "anthropic",
+		TestName:  "anthropic",
 	})
 }
 
 func TestIntegration_Anthropic_WebSearch(t *testing.T) {
 	runWebSearchValidation(t, integrationTestConfig{
-		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:           "claude-haiku-4-5-20251001",
+		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model:     "claude-haiku-4-5-20251001",
 		Reasoning: &anthropicReasoning,
-		TestName:        "anthropic",
+		TestName:  "anthropic",
 	})
 }
 
 func TestIntegration_Anthropic_ImageInput(t *testing.T) {
 	runImageInputValidation(t, integrationTestConfig{
-		Provider:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:           "claude-haiku-4-5-20251001",
+		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model:     "claude-haiku-4-5-20251001",
 		Reasoning: &anthropicReasoning,
-		TestName:        "anthropic",
+		TestName:  "anthropic",
+	})
+}
+
+func TestIntegration_Anthropic_StructuredOutput(t *testing.T) {
+	runStructuredOutputValidation(t, integrationTestConfig{
+		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model:     "claude-haiku-4-5-20251001",
+		Reasoning: &anthropicReasoning,
+		TestName:  "anthropic",
 	})
 }
 
@@ -622,28 +713,37 @@ var openaiReasoning = aikit.ReasoningConfig{Effort: "low"}
 
 func TestIntegration_OpenAI_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
-		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:           "gpt-5-nano",
+		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model:     "gpt-5-nano",
 		Reasoning: &openaiReasoning,
-		TestName:        "openai",
+		TestName:  "openai",
 	})
 }
 
 func TestIntegration_OpenAI_WebSearch(t *testing.T) {
 	runWebSearchValidation(t, integrationTestConfig{
-		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:           "gpt-5-nano",
+		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model:     "gpt-5-nano",
 		Reasoning: &openaiReasoning,
-		TestName:        "openai",
+		TestName:  "openai",
 	})
 }
 
 func TestIntegration_OpenAI_ImageInput(t *testing.T) {
 	runImageInputValidation(t, integrationTestConfig{
-		Provider:        aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:           "gpt-5-nano",
+		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model:     "gpt-5-nano",
 		Reasoning: &openaiReasoning,
-		TestName:        "openai",
+		TestName:  "openai",
+	})
+}
+
+func TestIntegration_OpenAI_StructuredOutput(t *testing.T) {
+	runStructuredOutputValidation(t, integrationTestConfig{
+		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
+		Model:     "gpt-5-nano",
+		Reasoning: &openaiReasoning,
+		TestName:  "openai",
 	})
 }
 
@@ -655,10 +755,19 @@ var googleReasoning = aikit.ReasoningConfig{Budget: 1024}
 
 func TestIntegration_Google_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
-		Provider:        aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")),
-		Model:           "gemini-3-flash-preview",
+		Provider:  aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")),
+		Model:     "gemini-3-flash-preview",
 		Reasoning: &googleReasoning,
-		TestName:        "google",
+		TestName:  "google",
+	})
+}
+
+func TestIntegration_Google_StructuredOutput(t *testing.T) {
+	runStructuredOutputValidation(t, integrationTestConfig{
+		Provider:  aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")),
+		Model:     "gemini-3-flash-preview",
+		Reasoning: &googleReasoning,
+		TestName:  "google",
 	})
 }
 
@@ -674,6 +783,14 @@ func TestIntegration_Groq_ToolCall(t *testing.T) {
 	})
 }
 
+func TestIntegration_Groq_StructuredOutput(t *testing.T) {
+	runStructuredOutputValidation(t, integrationTestConfig{
+		Provider: aikit.GroqProvider(os.Getenv("GROQ_KEY")),
+		Model:    "openai/gpt-oss-20b",
+		TestName: "groq",
+	})
+}
+
 // =============================================================================
 // FIREWORKS (COMPLETIONS API) INTEGRATION TESTS
 // =============================================================================
@@ -682,10 +799,19 @@ var fireworksReasoning = aikit.ReasoningConfig{Effort: "low"}
 
 func TestIntegration_Fireworks_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
-		Provider:        aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")),
-		Model:           "accounts/fireworks/models/gpt-oss-20b",
+		Provider:  aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")),
+		Model:     "accounts/fireworks/models/gpt-oss-20b",
 		Reasoning: &fireworksReasoning,
-		TestName:        "fireworks",
+		TestName:  "fireworks",
+	})
+}
+
+func TestIntegration_Fireworks_StructuredOutput(t *testing.T) {
+	runStructuredOutputValidation(t, integrationTestConfig{
+		Provider:  aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")),
+		Model:     "accounts/fireworks/models/gpt-oss-20b",
+		Reasoning: &fireworksReasoning,
+		TestName:  "fireworks",
 	})
 }
 
@@ -695,6 +821,14 @@ func TestIntegration_Fireworks_ToolCall(t *testing.T) {
 
 func TestIntegration_XAI_ToolCall(t *testing.T) {
 	runToolCallValidation(t, integrationTestConfig{
+		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
+		Model:    "grok-4-1-fast-reasoning-latest",
+		TestName: "xai",
+	})
+}
+
+func TestIntegration_XAI_StructuredOutput(t *testing.T) {
+	runStructuredOutputValidation(t, integrationTestConfig{
 		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
 		Model:    "grok-4-1-fast-reasoning-latest",
 		TestName: "xai",
@@ -715,13 +849,13 @@ func TestIntegration_XAI_ImageInput(t *testing.T) {
 
 func TestIntegration_Snapshot_SameProvider_Anthropic(t *testing.T) {
 	runSnapshotRestoreValidation(t, snapshotTestConfig{
-		Provider1:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model1:           "claude-haiku-4-5-20251001",
+		Provider1:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model1:     "claude-haiku-4-5-20251001",
 		Reasoning1: &anthropicReasoning,
 		Provider2:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
 		Model2:     "claude-haiku-4-5-20251001",
 		Reasoning2: &anthropicReasoning,
-		TestName:         "snapshot_anthropic_to_anthropic",
+		TestName:   "snapshot_anthropic_to_anthropic",
 	})
 }
 
@@ -730,12 +864,12 @@ func TestIntegration_Snapshot_CrossProvider_Anthropic_OpenAI(t *testing.T) {
 	// tool call IDs are provider-specific (Anthropic uses toolu_..., OpenAI uses call_...).
 	// This test validates context preservation without tool call history.
 	runSnapshotRestoreValidation(t, snapshotTestConfig{
-		Provider1:        aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model1:           "claude-haiku-4-5-20251001",
+		Provider1:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
+		Model1:     "claude-haiku-4-5-20251001",
 		Reasoning1: &anthropicReasoning,
 		Provider2:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
 		Model2:     "gpt-5-nano",
 		Reasoning2: &openaiReasoning,
-		TestName:         "snapshot_anthropic_to_openai",
+		TestName:   "snapshot_anthropic_to_openai",
 	})
 }

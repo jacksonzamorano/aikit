@@ -57,6 +57,9 @@ func (p *ResponsesAPIRequest) InitSession(thread *Thread) {
 			p.Request.Reasoning.Summary = "auto"
 		}
 	}
+	if textFormat := thread.StructuredOutputTextFormat(); textFormat != nil {
+		p.Request.Text = &ResponsesText{Format: textFormat}
+	}
 }
 
 func (p *ResponsesAPIRequest) Update(block *ThreadBlock) {

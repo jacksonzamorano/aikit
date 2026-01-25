@@ -26,13 +26,15 @@ type ReasoningConfig struct {
 //   - Execution results should not carry over to restored conversations
 type Thread struct {
 	// Configuration
-	Reasoning          ReasoningConfig
-	Tools              map[string]ToolDefinition
-	MaxWebSearches     int
-	WebFetchEnabled    bool
-	HandleToolFunction func(name string, args string) string
-	UpdateOnFinalize   bool
-	CoalesceTextBlocks bool
+	Reasoning              ReasoningConfig
+	Tools                  map[string]ToolDefinition
+	StructuredOutputSchema *JsonSchema
+	StructuredOutputStrict *bool
+	MaxWebSearches         int
+	WebFetchEnabled        bool
+	HandleToolFunction     func(name string, args string) string
+	UpdateOnFinalize       bool
+	CoalesceTextBlocks     bool
 
 	// Execution results - not restored from snapshots
 	Success bool
@@ -97,6 +99,55 @@ func NewProviderState() *Thread {
 func (s *Thread) SetError(err error) {
 	s.Error = err.Error()
 	s.Success = false
+}
+
+func (s *Thread) StructuredOutputStrictValue() bool {
+	if s.StructuredOutputStrict != nil {
+		return *s.StructuredOutputStrict
+	}
+	return true
+}
+
+func (s *Thread) StructuredOutputSchemaValue() *JsonSchema {
+	if s.StructuredOutputSchema == nil {
+		return nil
+	}
+	return PrepareStructuredOutputSchema(s.StructuredOutputSchema, s.StructuredOutputStrictValue(), true)
+}
+
+func (s *Thread) StructuredOutputSchemaValueWithoutAdditionalProperties() *JsonSchema {
+	if s.StructuredOutputSchema == nil {
+		return nil
+	}
+	return PrepareStructuredOutputSchema(s.StructuredOutputSchema, s.StructuredOutputStrictValue(), false)
+}
+
+func (s *Thread) StructuredOutputFormat() *JsonSchemaResponseFormat {
+	schema := s.StructuredOutputSchemaValue()
+	if schema == nil {
+		return nil
+	}
+	return &JsonSchemaResponseFormat{
+		Type: "json_schema",
+		JsonSchema: JsonSchemaDescription{
+			Name:   "response",
+			Schema: schema,
+			Strict: s.StructuredOutputStrictValue(),
+		},
+	}
+}
+
+func (s *Thread) StructuredOutputTextFormat() *ResponsesTextFormat {
+	schema := s.StructuredOutputSchemaValue()
+	if schema == nil {
+		return nil
+	}
+	return &ResponsesTextFormat{
+		Type:   "json_schema",
+		Name:   "response",
+		Schema: schema,
+		Strict: s.StructuredOutputStrictValue(),
+	}
 }
 
 // IncompleteToolCalls returns the count of tool call blocks that are not yet complete.

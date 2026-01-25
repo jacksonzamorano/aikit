@@ -38,6 +38,12 @@ func (p *AIStudioAPIRequest) InitSession(thread *Thread) {
 			{FunctionDeclarations: tools},
 		},
 	}
+	if schema := thread.StructuredOutputSchemaValueWithoutAdditionalProperties(); schema != nil {
+		p.request.GenerationConfig = &AIStudioGenerationConfig{
+			ResponseMimeType: "application/json",
+			ResponseSchema:   schema,
+		}
+	}
 }
 
 func (p *AIStudioAPIRequest) Update(block *ThreadBlock) {

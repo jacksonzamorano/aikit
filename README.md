@@ -107,14 +107,14 @@ func main() {
     session.Thread.Input("What time is it in New York?")
 
     // Define available tools
-    session.Thread.Tools = map[string]aikit.ToolDefinition{
-        "get_time": {
-            Description: "Get the current time for a timezone",
-            Parameters: &aikit.ToolJsonSchema{
-                Type: "object",
-                Properties: &map[string]*aikit.ToolJsonSchema{
-                    "timezone": {
-                        Type:        "string",
+	    session.Thread.Tools = map[string]aikit.ToolDefinition{
+	        "get_time": {
+	            Description: "Get the current time for a timezone",
+	            Parameters: &aikit.JsonSchema{
+	                Type: "object",
+	                Properties: &map[string]*aikit.JsonSchema{
+	                    "timezone": {
+	                        Type:        "string",
                         Description: "Timezone (e.g., 'America/New_York')",
                     },
                 },
@@ -192,4 +192,34 @@ result := session.Stream(func(thread *aikit.Thread) {
         }
     }
 })
+```
+
+### Structured Output
+
+Provide a JSON schema to request structured output:
+
+```go
+provider := aikit.OpenAIProvider(os.Getenv("OPENAI_KEY"))
+session := provider.Session()
+
+session.Thread.Model = "gpt-4.1-mini"
+session.Thread.System("Return a short answer in JSON.")
+session.Thread.Input("What is the capital of France?")
+
+session.Thread.StructuredOutputSchema = &aikit.JsonSchema{
+    Type: "object",
+    Properties: &map[string]*aikit.JsonSchema{
+        "answer": {Type: "string"},
+    },
+    Required: []string{"answer"},
+}
+
+strict := true
+session.Thread.StructuredOutputStrict = &strict
+
+result := session.Stream(func(thread *aikit.Thread) {
+    // Handle streaming updates
+})
+
+_ = result
 ```

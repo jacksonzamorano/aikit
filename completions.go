@@ -46,6 +46,9 @@ func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
 		},
 		ReasoningEffort: thread.Reasoning.Effort,
 	}
+	if responseFormat := thread.StructuredOutputFormat(); responseFormat != nil {
+		p.request.ResponseFormat = responseFormat
+	}
 }
 
 func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {

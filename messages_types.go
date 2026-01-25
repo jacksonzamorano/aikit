@@ -11,13 +11,19 @@ type MessagesError struct {
 }
 
 type MessagesRequest struct {
-	Model     string            `json:"model"`
-	Messages  []MessagesMessage `json:"messages"`
-	Tools     []map[string]any  `json:"tools"`
-	System    string            `json:"system"`
-	MaxTokens int64             `json:"max_tokens"`
-	Thinking  *MessagesThinking `json:"thinking,omitempty"`
-	Stream    bool              `json:"stream"`
+	Model        string                `json:"model"`
+	Messages     []MessagesMessage     `json:"messages"`
+	Tools        []map[string]any      `json:"tools"`
+	System       string                `json:"system"`
+	MaxTokens    int64                 `json:"max_tokens"`
+	Thinking     *MessagesThinking     `json:"thinking,omitempty"`
+	OutputFormat *MessagesOutputFormat `json:"output_format,omitempty"`
+	Stream       bool                  `json:"stream"`
+}
+
+type MessagesOutputFormat struct {
+	Type   string      `json:"type"`
+	Schema *JsonSchema `json:"schema"`
 }
 type MessagesMessage struct {
 	Role    string            `json:"role"`

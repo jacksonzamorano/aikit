@@ -7,9 +7,9 @@ import (
 func TestUnit_Tool_DefinitionSerialization(t *testing.T) {
 	toolDef := ToolDefinition{
 		Description: "Search for information on a topic",
-		Parameters: &ToolJsonSchema{
+		Parameters: &JsonSchema{
 			Type: "object",
-			Properties: &map[string]*ToolJsonSchema{
+			Properties: &map[string]*JsonSchema{
 				"query": {Type: "string", Description: "The search query"},
 				"limit": {Type: "integer", Description: "Maximum number of results"},
 			},

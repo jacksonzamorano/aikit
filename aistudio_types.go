@@ -3,9 +3,10 @@ package aikit
 import "encoding/json"
 
 type AIStudioRequest struct {
-	SystemInstruction *AIStudioContent  `json:"systemInstruction,omitempty"`
-	Contents          []AIStudioContent `json:"contents"`
-	Tools             []AIStudioTools   `json:"tools"`
+	SystemInstruction *AIStudioContent          `json:"systemInstruction,omitempty"`
+	Contents          []AIStudioContent         `json:"contents"`
+	Tools             []AIStudioTools           `json:"tools"`
+	GenerationConfig  *AIStudioGenerationConfig `json:"generationConfig,omitempty"`
 }
 type AIStudioTools struct {
 	FunctionDeclarations []map[string]any `json:"functionDeclarations,omitempty"`
@@ -27,6 +28,10 @@ type AIStudioUsageMetadata struct {
 	OutputTokens   int64 `json:"candidatesTokenCount"`
 	CachedTokens   int64 `json:"cachedContentTokenCount"`
 	ThinkingTokens int64 `json:"thinkingTokenCount"`
+}
+type AIStudioGenerationConfig struct {
+	ResponseMimeType string      `json:"responseMimeType,omitempty"`
+	ResponseSchema   *JsonSchema `json:"responseSchema,omitempty"`
 }
 type AIStudioCandidate struct {
 	Content      AIStudioContent `json:"content"`

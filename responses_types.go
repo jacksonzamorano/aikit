@@ -12,6 +12,18 @@ type ResponsesRequest struct {
 	Instructions       string              `json:"instructions,omitempty"`
 	PreviousResponseID string              `json:"previous_response_id,omitempty"`
 	Reasoning          *ResponsesReasoning `json:"reasoning,omitempty"`
+	Text               *ResponsesText      `json:"text,omitempty"`
+}
+
+type ResponsesText struct {
+	Format *ResponsesTextFormat `json:"format,omitempty"`
+}
+
+type ResponsesTextFormat struct {
+	Type   string      `json:"type"`
+	Name   string      `json:"name"`
+	Schema *JsonSchema `json:"schema"`
+	Strict bool        `json:"strict"`
 }
 
 type ResponsesReasoning struct {
@@ -19,10 +31,10 @@ type ResponsesReasoning struct {
 	Summary string `json:"summary,omitempty"`
 }
 type ResponsesTool struct {
-	Type        string          `json:"type,omitempty"`
-	Name        string          `json:"name,omitempty"`
-	Parameters  *ToolJsonSchema `json:"parameters,omitempty"`
-	Description string          `json:"description,omitempty"`
+	Type        string      `json:"type,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Parameters  *JsonSchema `json:"parameters,omitempty"`
+	Description string      `json:"description,omitempty"`
 }
 
 type ResponsesResult struct {

@@ -9,12 +9,13 @@ type CompletionsErrorDetail struct {
 	Code    string `json:"code,omitempty"`
 }
 type CompletionsRequest struct {
-	Model           string               `json:"model"`
-	Messages        []CompletionsMessage `json:"messages"`
-	Tools           []map[string]any     `json:"tools,omitempty"`
-	Stream          bool                 `json:"stream,omitempty"`
-	StreamOptions   map[string]any       `json:"stream_options,omitempty"`
-	ReasoningEffort string               `json:"reasoning_effort,omitempty"`
+	Model           string                    `json:"model"`
+	Messages        []CompletionsMessage      `json:"messages"`
+	Tools           []map[string]any          `json:"tools,omitempty"`
+	Stream          bool                      `json:"stream,omitempty"`
+	StreamOptions   map[string]any            `json:"stream_options,omitempty"`
+	ResponseFormat  *JsonSchemaResponseFormat `json:"response_format,omitempty"`
+	ReasoningEffort string                    `json:"reasoning_effort,omitempty"`
 }
 type CompletionsMessage struct {
 	Id               string                `json:"id,omitempty"`

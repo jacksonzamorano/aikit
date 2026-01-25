@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type messagesLastToolCall struct {
@@ -67,6 +68,12 @@ func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 		Tools:     tools,
 		MaxTokens: p.Config.MaxTokens,
 		Stream:    true,
+	}
+	if schema := thread.StructuredOutputSchemaValue(); schema != nil {
+		p.request.OutputFormat = &MessagesOutputFormat{
+			Type:   "json_schema",
+			Schema: schema,
+		}
 	}
 
 	if thread.Reasoning.Budget > 0 {
@@ -192,8 +199,17 @@ func (p *MessagesAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	}
 
 	providerReq.Header.Add("x-api-key", p.Config.APIKey)
-	if len(p.Config.BetaFeatures) > 0 {
-		providerReq.Header.Add("x-beta-features", fmt.Sprintf("%s", p.Config.BetaFeatures))
+	if p.request.OutputFormat != nil || len(p.Config.BetaFeatures) > 0 {
+		features := make([]string, 0, len(p.Config.BetaFeatures)+1)
+		features = append(features, p.Config.BetaFeatures...)
+		if p.request.OutputFormat != nil {
+			features = append(features, "structured-outputs-2025-11-13")
+		}
+		betaHeader := "x-beta-features"
+		if p.Config.Name == "anthropic" {
+			betaHeader = "anthropic-beta"
+		}
+		providerReq.Header.Add(betaHeader, strings.Join(features, ","))
 	}
 	return providerReq
 }
