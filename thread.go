@@ -13,42 +13,27 @@ type ReasoningConfig struct {
 	Budget int    `json:"budget,omitempty" xml:"budget,attr,omitempty"`
 }
 
-// Thread represents an inference conversation with configuration and execution state.
-//
-// Thread is NOT directly serializable. For persistence, use the Snapshot() method which
-// returns only the conversation blocks. Configuration (Model, Tools, Reasoning, etc.)
-// and execution results (Success, Error, Result) must be managed separately by the caller.
-//
-// This design is intentional because:
-//   - Tool handlers cannot be serialized
-//   - Configuration is typically code-defined, not persisted
-//   - Restoring to a different model/provider is a valid use case
-//   - Execution results should not carry over to restored conversations
 type Thread struct {
 	// Configuration
-	Reasoning              ReasoningConfig
-	Tools                  map[string]ToolDefinition
-	StructuredOutputSchema *JsonSchema
-	StructuredOutputStrict *bool
-	MaxWebSearches         int
-	WebFetchEnabled        bool
-	HandleToolFunction     func(name string, args string) string
-	UpdateOnFinalize       bool
-	CoalesceTextBlocks     bool
+	Reasoning              ReasoningConfig                       `json:"reasoning"`
+	Tools                  map[string]ToolDefinition             `json:"tools"`
+	StructuredOutputSchema *JsonSchema                           `json:"schema"`
+	StructuredOutputStrict *bool                                 `json:"schema_strict"`
+	MaxWebSearches         int                                   `json:"max_web_searches"`
+	WebFetchEnabled        bool                                  `json:"web_fetch_enabled"`
+	HandleToolFunction     func(name string, args string) string `json:"-"`
+	UpdateOnFinalize       bool                                  `json:"update_on_finalize"`
+	CoalesceTextBlocks     bool                                  `json:"coalesce_text_blocks"`
 
-	// Execution results - not restored from snapshots
 	Success bool
 	Error   string
 	Result  ThreadUsage
 
-	// Metadata
-	Model    string
-	ThreadId string
+	Model    string `json:"model"`
+	ThreadId string `json:"thread_id"`
 
-	// Conversation state - use Snapshot()/Restore() for persistence
-	Blocks []*ThreadBlock
+	Blocks []*ThreadBlock `json:"blocks"`
 
-	// Runtime state (private, not serializable)
 	updated         bool
 	CurrentProvider string
 }
