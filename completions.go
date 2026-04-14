@@ -40,6 +40,7 @@ func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
 		Messages: []CompletionsMessage{},
 		Model:    thread.Model,
 		Tools:    tools,
+		Stream:   true,
 		StreamOptions: map[string]any{
 			"include_usage": true,
 		},

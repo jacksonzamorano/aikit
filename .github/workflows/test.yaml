@@ -27,16 +27,5 @@ jobs:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
           FIREWORKS_KEY: ${{ secrets.FIREWORKS_KEY }}
-        run: go test -v -coverprofile=coverage.out -covermode=atomic .
-
-      - name: Generate coverage report
-        run: go tool cover -func=coverage.out
-
-      - name: Generate HTML coverage report
-        run: go tool cover -html=coverage.out -o coverage.html
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.html
+          OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+        run: go test .
