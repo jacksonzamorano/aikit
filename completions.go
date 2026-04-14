@@ -24,12 +24,13 @@ func (p *CompletionsAPIRequest) Transport() GatewayTransport {
 
 func (p *CompletionsAPIRequest) PrepareForUpdates() {}
 
-func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
+func (p *CompletionsAPIRequest) InitSession(thread *StreamState) {
 	tools := make([]map[string]any, 0)
-	for name := range thread.Tools {
+	threadTools := thread.Tools()
+	for name := range threadTools {
 		toolSpec := map[string]any{}
-		toolSpec["description"] = thread.Tools[name].Description
-		toolSpec["parameters"] = thread.Tools[name].Parameters
+		toolSpec["description"] = threadTools[name].Description
+		toolSpec["parameters"] = threadTools[name].Parameters
 		toolSpec["name"] = name
 		tools = append(tools, map[string]any{
 			"type":     "function",
@@ -38,13 +39,13 @@ func (p *CompletionsAPIRequest) InitSession(thread *Thread) {
 	}
 	p.request = CompletionsRequest{
 		Messages: []CompletionsMessage{},
-		Model:    thread.Model,
+		Model:    thread.Model(),
 		Tools:    tools,
 		Stream:   true,
 		StreamOptions: map[string]any{
 			"include_usage": true,
 		},
-		ReasoningEffort: thread.Reasoning.Effort,
+		ReasoningEffort: thread.Reasoning().Effort,
 	}
 	if responseFormat := thread.StructuredOutputFormat(); responseFormat != nil {
 		p.request.ResponseFormat = responseFormat
@@ -79,10 +80,8 @@ func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {
 		if len(p.request.Messages) > 0 {
 			lastIdx := len(p.request.Messages) - 1
 			if p.request.Messages[lastIdx].Role == "user" {
-				// Content is []CompletionTextBlock or could be []any
 				switch c := p.request.Messages[lastIdx].Content.(type) {
 				case []CompletionTextBlock:
-					// Convert to []any and append image
 					arr := make([]any, len(c))
 					for i, tb := range c {
 						arr[i] = tb
@@ -137,7 +136,7 @@ func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *CompletionsAPIRequest) MakeRequest(thread *Thread) *http.Request {
+func (p *CompletionsAPIRequest) MakeRequest(thread *StreamState) *http.Request {
 	endpoint := p.Config.resolveEndpoint("/v1/chat/completions")
 	body, _ := json.Marshal(p.request)
 	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
@@ -147,28 +146,28 @@ func (p *CompletionsAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	return providerReq
 }
 
-func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
+func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *StreamState) ChunkResult {
 	var chunk CompletionsStreamChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 	}
 
-	thread.ThreadId = chunk.Id
+	thread.SetThreadId(chunk.Id)
 
 	if chunk.Usage != nil {
 		nonCachedInput := max(chunk.Usage.PromptTokens-chunk.Usage.PromptTokenDetails.CachedTokens, 0)
-		thread.Result.InputTokens += nonCachedInput
-		thread.Result.OutputTokens += chunk.Usage.CompletionTokens
-		thread.Result.CacheReadTokens += chunk.Usage.PromptTokenDetails.CachedTokens
+		thread.AddInputTokens(nonCachedInput)
+		thread.AddOutputTokens(chunk.Usage.CompletionTokens)
+		thread.AddCacheReadTokens(chunk.Usage.PromptTokenDetails.CachedTokens)
 	}
 
 	for _, choice := range chunk.Choices {
 		baseId := fmt.Sprintf("%s-%d", chunk.Id, choice.Index)
 		if choice.Delta.ReasoningContent != "" {
-			thread.Thinking(baseId+"-thinking", choice.Delta.ReasoningContent)
+			thread.AppendThinking(baseId+"-thinking", choice.Delta.ReasoningContent)
 		}
 		if choice.Delta.Content != "" {
-			thread.Text(baseId, choice.Delta.Content)
+			thread.AppendText(baseId, choice.Delta.Content)
 		}
 
 		for i := range choice.Delta.ToolCalls {
@@ -182,15 +181,15 @@ func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult
 
 			if tc.Function != nil {
 				if tc.ExtraContent != nil && tc.ExtraContent.Google != nil && tc.ExtraContent.Google.ThoughtSignature != "" {
-					thread.ToolCallWithThinking(toolId, tc.Function.Name, tc.Function.Arguments, "", tc.ExtraContent.Google.ThoughtSignature)
+					thread.AppendToolCallWithThinking(toolId, tc.Function.Name, tc.Function.Arguments, "", tc.ExtraContent.Google.ThoughtSignature)
 				} else {
-					thread.ToolCall(toolId, tc.Function.Name, tc.Function.Arguments)
+					thread.AppendToolCall(toolId, tc.Function.Name, tc.Function.Arguments)
 				}
 			}
 		}
 		if choice.FinishReason != nil {
-			thread.Complete(baseId)
-			thread.Complete(baseId + "-thinking")
+			thread.CompleteBlock(baseId)
+			thread.CompleteBlock(baseId + "-thinking")
 		}
 	}
 	return AcceptedResult()

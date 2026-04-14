@@ -24,19 +24,20 @@ func (p *ResponsesAPIRequest) PrepareForUpdates() {
 	p.Request.Inputs = []ResponsesInput{}
 }
 
-func (p *ResponsesAPIRequest) InitSession(thread *Thread) {
+func (p *ResponsesAPIRequest) InitSession(thread *StreamState) {
 	tools := []ResponsesTool{}
-	for k := range thread.Tools {
+	threadTools := thread.Tools()
+	for k := range threadTools {
 		tool := ResponsesTool{
-			Description: thread.Tools[k].Description,
-			Parameters:  thread.Tools[k].Parameters,
+			Description: threadTools[k].Description,
+			Parameters:  threadTools[k].Parameters,
 			Name:        k,
 			Type:        "function",
 		}
 		tools = append(tools, tool)
 	}
 
-	if thread.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
+	if thread.MaxWebSearches() > 0 && p.Config.WebSearchToolName != "" {
 		tools = append(tools, ResponsesTool{
 			Type: p.Config.WebSearchToolName,
 		})
@@ -45,13 +46,13 @@ func (p *ResponsesAPIRequest) InitSession(thread *Thread) {
 	p.Request = ResponsesRequest{
 		Inputs: []ResponsesInput{},
 		Tools:  tools,
-		Model:  thread.Model,
+		Model:  thread.Model(),
 		Stream: true,
 	}
 
-	if thread.Reasoning.Effort != "" {
+	if thread.Reasoning().Effort != "" {
 		p.Request.Reasoning = &ResponsesReasoning{
-			Effort: thread.Reasoning.Effort,
+			Effort: thread.Reasoning().Effort,
 		}
 		if p.Config.UseThinkingSummaries {
 			p.Request.Reasoning.Summary = "auto"
@@ -120,7 +121,7 @@ func (p *ResponsesAPIRequest) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *ResponsesAPIRequest) MakeRequest(thread *Thread) *http.Request {
+func (p *ResponsesAPIRequest) MakeRequest(thread *StreamState) *http.Request {
 	body, _ := json.Marshal(p.Request)
 	providerReq, _ := http.NewRequest("POST", p.Config.resolveEndpoint("/v1/responses"), bytes.NewReader(body))
 	providerReq.Header.Add("Content-Type", "application/json")
@@ -129,7 +130,7 @@ func (p *ResponsesAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	return providerReq
 }
 
-func (p *ResponsesAPIRequest) OnChunk(rawData []byte, thread *Thread) ChunkResult {
+func (p *ResponsesAPIRequest) OnChunk(rawData []byte, thread *StreamState) ChunkResult {
 
 	var data ResponsesStreamEvent
 	if err := json.Unmarshal(rawData, &data); err != nil {
@@ -139,38 +140,38 @@ func (p *ResponsesAPIRequest) OnChunk(rawData []byte, thread *Thread) ChunkResul
 
 	switch data.Type {
 	case "response.output_text.delta":
-		thread.Text(data.ItemId, data.Delta)
+		thread.AppendText(data.ItemId, data.Delta)
 	case "response.output_text.done":
-		thread.Complete(data.ItemId)
+		thread.CompleteBlock(data.ItemId)
 	case "response.output_item.done":
 		switch data.Item.Type {
 		case "function_call":
-			thread.ToolCall(data.Item.CallId, data.Item.Name, data.Item.Arguments)
+			thread.AppendToolCall(data.Item.CallId, data.Item.Name, data.Item.Arguments)
 		case "web_search_call":
 			switch data.Item.Action.Type {
 			case "search":
-				thread.WebSearchQuery(data.Item.Id, data.Item.Action.Query)
-				thread.CompleteWebSearch(data.Item.Id)
+				thread.AppendWebSearchQuery(data.Item.Id, data.Item.Action.Query)
+				thread.AppendCompleteWebSearch(data.Item.Id)
 			case "open_page":
-				thread.ViewWebpageUrl(data.Item.Id, data.Item.Action.Url)
+				thread.AppendViewWebpageUrl(data.Item.Id, data.Item.Action.Url)
 			}
 		case "reasoning":
 			for s := range data.Summary {
-				thread.Thinking(data.ItemId, data.Summary[s].Text)
+				thread.AppendThinking(data.ItemId, data.Summary[s].Text)
 			}
 		}
 	case "response.output_text.annotation.added":
-		thread.Cite(data.ItemId, data.Annotation.Url)
+		thread.AppendCite(data.ItemId, data.Annotation.Url)
 	case "response.reasoning_summary_text.delta":
-		thread.Thinking(data.ItemId, data.Delta)
+		thread.AppendThinking(data.ItemId, data.Delta)
 	case "response.reasoning_summary_text.done":
-		thread.Complete(data.ItemId)
+		thread.CompleteBlock(data.ItemId)
 	case "response.completed":
 		usage := data.Response.Usage
-		thread.Result.CacheReadTokens += usage.InputDetails.CachedTokens
-		thread.Result.InputTokens += (usage.InputTokens + usage.PromptTokens - usage.InputDetails.CachedTokens)
-		thread.Result.OutputTokens += usage.OutputTokens + usage.CompletionTokens
-		thread.ThreadId = data.Response.Id
+		thread.AddCacheReadTokens(usage.InputDetails.CachedTokens)
+		thread.AddInputTokens(usage.InputTokens + usage.PromptTokens - usage.InputDetails.CachedTokens)
+		thread.AddOutputTokens(usage.OutputTokens + usage.CompletionTokens)
+		thread.SetThreadId(data.Response.Id)
 		p.Request.PreviousResponseID = data.Response.Id
 		return DoneChunkResult()
 	case "error", "response.failed":

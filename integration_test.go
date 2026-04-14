@@ -1,6 +1,7 @@
 package aikit_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,10 +37,10 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	toolFunctionCalled := 0
 
 	session := cfg.Provider.Session()
-	session.Thread.Model = cfg.Model
-	session.Thread.System("You are a helpful assistant. You will always request the current time using the get_time tool with the timezone parameter set to 'UTC', and use the result in your response.")
-	session.Thread.Input("What date is exactly 365 days from today, and what day of the week will it be?")
-	session.Thread.Tools = map[string]aikit.ToolDefinition{
+	session.SetModel(cfg.Model)
+	session.System("You are a helpful assistant. You will always request the current time using the get_time tool with the timezone parameter set to 'UTC', and use the result in your response.")
+	session.Input("What date is exactly 365 days from today, and what day of the week will it be?")
+	session.SetTools(map[string]aikit.ToolDefinition{
 		"get_time": {
 			Description: "Get the current time in ISO 8601 format for a specific timezone.",
 			Parameters: &aikit.JsonSchema{
@@ -53,12 +54,12 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 				Required: []string{"timezone"},
 			},
 		},
-	}
+	})
 	if cfg.Reasoning != nil {
-		session.Thread.Reasoning = *cfg.Reasoning
+		session.SetReasoning(*cfg.Reasoning)
 	}
-	session.Thread.CoalesceTextBlocks = true
-	session.Thread.HandleToolFunction = func(name string, args string) string {
+	session.SetCoalesceTextBlocks(true)
+	session.SetHandleToolFunction(func(name string, args string) string {
 		toolFunctionCalled++
 		switch name {
 		case "get_time":
@@ -79,19 +80,21 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 		default:
 			return fmt.Sprintf("Error: Unknown tool: %s", name)
 		}
-	}
+	})
 
-	result := session.Stream(func(result *aikit.Thread) {
+	var result *aikit.Session
+	for update := range session.Stream(context.Background()) {
 		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(result.Blocks)
+		bytes, _ := json.Marshal(update.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-	})
-	all := snapshotResult(*result)
+		result = update
+	}
+	all := snapshotResult(result)
 
 	// Write test run data
 	writeTestRun(cfg.TestName+"_tool", all)
@@ -116,26 +119,28 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	var lastHash string
 
 	session := cfg.Provider.Session()
-	session.Thread.Model = cfg.Model
-	session.Thread.MaxWebSearches = 1
-	session.Thread.CoalesceTextBlocks = true
-	session.Thread.System("You are a helpful assistant. Always check for the most up-to-date information.")
-	session.Thread.Input("What's new in the newest version of React? Keep your answer concise.")
+	session.SetModel(cfg.Model)
+	session.SetMaxWebSearches(1)
+	session.SetCoalesceTextBlocks(true)
+	session.System("You are a helpful assistant. Always check for the most up-to-date information.")
+	session.Input("What's new in the newest version of React? Keep your answer concise.")
 	if cfg.Reasoning != nil {
-		session.Thread.Reasoning = *cfg.Reasoning
+		session.SetReasoning(*cfg.Reasoning)
 	}
 
-	result := session.Stream(func(result *aikit.Thread) {
+	var result *aikit.Session
+	for update := range session.Stream(context.Background()) {
 		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(result.Blocks)
+		bytes, _ := json.Marshal(update.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-	})
-	all := snapshotResult(*result)
+		result = update
+	}
+	all := snapshotResult(result)
 
 	// Write test run data
 	writeTestRun(cfg.TestName+"_websearch", all)
@@ -165,28 +170,29 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	var lastHash string
 
 	session := cfg.Provider.Session()
-	session.Thread.Model = cfg.Model
-	session.Thread.CoalesceTextBlocks = true
-	session.Thread.System("You are a helpful assistant that identifies images.")
-	session.Thread.InputImage(imageData, "image/jpeg")
-	session.Thread.Input("What famous video is this frame from?")
+	session.SetModel(cfg.Model)
+	session.SetCoalesceTextBlocks(true)
+	session.System("You are a helpful assistant that identifies images.")
+	session.InputImage(imageData, "image/jpeg")
+	session.Input("What famous video is this frame from?")
 	if cfg.Reasoning != nil {
-		session.Thread.Reasoning = *cfg.Reasoning
+		session.SetReasoning(*cfg.Reasoning)
 	}
 
-	result := session.Stream(func(result *aikit.Thread) {
-		all += snapshotResult(*result)
+	var result *aikit.Session
+	for update := range session.Stream(context.Background()) {
+		all += snapshotResult(update)
 
 		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(result.Blocks)
+		bytes, _ := json.Marshal(update.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-	})
-	all += snapshotResult(*result)
+		result = update
+	}
 
 	// Write test run data
 	writeTestRun(cfg.TestName+"_image", all)
@@ -209,25 +215,27 @@ func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
 	var lastHash string
 
 	session := cfg.Provider.Session()
-	session.Thread.Model = cfg.Model
-	session.Thread.System("Return only JSON that matches the provided schema.")
-	session.Thread.Input("Return the number 2+2 as a string value.")
-	session.Thread.StructuredOutputSchema = structuredOutputSchema()
+	session.SetModel(cfg.Model)
+	session.System("Return only JSON that matches the provided schema.")
+	session.Input("Return the number 2+2 as a string value.")
+	session.SetStructuredOutput(structuredOutputSchema(), true)
 	if cfg.Reasoning != nil {
-		session.Thread.Reasoning = *cfg.Reasoning
+		session.SetReasoning(*cfg.Reasoning)
 	}
-	session.Thread.CoalesceTextBlocks = true
+	session.SetCoalesceTextBlocks(true)
 
-	result := session.Stream(func(result *aikit.Thread) {
-		bytes, _ := json.Marshal(result.Blocks)
+	var result *aikit.Session
+	for update := range session.Stream(context.Background()) {
+		bytes, _ := json.Marshal(update.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-	})
-	all := snapshotResult(*result)
+		result = update
+	}
+	all := snapshotResult(result)
 
 	writeTestRun(cfg.TestName+"_structured", all)
 
@@ -242,22 +250,22 @@ func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
 // VALIDATION FUNCTIONS
 // =============================================================================
 
-func validateBasicResults(t *testing.T, result *aikit.Thread) {
+func validateBasicResults(t *testing.T, result *aikit.Session) {
 	t.Helper()
-	if !result.Success {
-		t.Error(result.Error)
+	if !result.Succeeded() {
+		t.Error(result.ErrorMessage())
 	}
-	if result.Result.OutputTokens == 0 {
-		t.Fatalf("Received no output tokens: '%s'.", result.Error)
+	if result.Usage().OutputTokens == 0 {
+		t.Fatalf("Received no output tokens: '%s'.", result.ErrorMessage())
 	}
-	if result.Result.InputTokens == 0 {
-		t.Fatalf("Received no input tokens '%s'.", result.Error)
+	if result.Usage().InputTokens == 0 {
+		t.Fatalf("Received no input tokens '%s'.", result.ErrorMessage())
 	}
 }
 
-func validateBlockIntegrity(t *testing.T, result *aikit.Thread) {
+func validateBlockIntegrity(t *testing.T, result *aikit.Session) {
 	t.Helper()
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if !b.Complete {
 			t.Errorf("Block %s of type %s not marked complete.", b.ID, b.Type)
 		}
@@ -268,9 +276,9 @@ func validateBlockIntegrity(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateToolCallPairing(t *testing.T, result *aikit.Thread) {
+func validateToolCallPairing(t *testing.T, result *aikit.Session) {
 	t.Helper()
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockToolCall && b.ToolCall != nil {
 			if b.ToolResult == nil {
 				t.Errorf("Tool call %s (%s) has no ToolResult", b.ID, b.ToolCall.Name)
@@ -279,10 +287,10 @@ func validateToolCallPairing(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateBlockIDUniqueness(t *testing.T, result *aikit.Thread) {
+func validateBlockIDUniqueness(t *testing.T, result *aikit.Session) {
 	t.Helper()
 	seenIds := make(map[string]bool)
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.ID != "" {
 			if seenIds[b.ID] {
 				t.Errorf("Duplicate block ID: %s", b.ID)
@@ -292,9 +300,9 @@ func validateBlockIDUniqueness(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateToolArguments(t *testing.T, result *aikit.Thread) {
+func validateToolArguments(t *testing.T, result *aikit.Session) {
 	t.Helper()
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockToolCall && b.ToolCall != nil {
 			if b.ToolCall.Name == "get_time" {
 				var args struct {
@@ -310,10 +318,10 @@ func validateToolArguments(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateToolFunctionExecution(t *testing.T, callCount int, result *aikit.Thread) {
+func validateToolFunctionExecution(t *testing.T, callCount int, result *aikit.Session) {
 	t.Helper()
 	toolCallBlocks := 0
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockToolCall && b.ToolCall != nil {
 			toolCallBlocks++
 		}
@@ -323,10 +331,10 @@ func validateToolFunctionExecution(t *testing.T, callCount int, result *aikit.Th
 	}
 }
 
-func validateWebSearchResults(t *testing.T, result *aikit.Thread) {
+func validateWebSearchResults(t *testing.T, result *aikit.Session) {
 	t.Helper()
 	webSearchCount := 0
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockWebSearch {
 			webSearchCount++
 			if b.WebSearch == nil {
@@ -352,13 +360,13 @@ func validateWebSearchResults(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateReasoningBlocks(t *testing.T, reasoning *aikit.ReasoningConfig, result *aikit.Thread) {
+func validateReasoningBlocks(t *testing.T, reasoning *aikit.ReasoningConfig, result *aikit.Session) {
 	t.Helper()
 	if reasoning == nil || (reasoning.Effort == "" && reasoning.Budget == 0) {
 		return
 	}
 	hasThinking := false
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockThinking || b.Type == aikit.InferenceBlockEncryptedThinking {
 			hasThinking = true
 			break
@@ -369,10 +377,10 @@ func validateReasoningBlocks(t *testing.T, reasoning *aikit.ReasoningConfig, res
 	}
 }
 
-func validateImageInputResponse(t *testing.T, result *aikit.Thread) {
+func validateImageInputResponse(t *testing.T, result *aikit.Session) {
 	t.Helper()
 	hasTextResponse := false
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockText && len(b.Text) > 0 {
 			hasTextResponse = true
 			break
@@ -383,11 +391,11 @@ func validateImageInputResponse(t *testing.T, result *aikit.Thread) {
 	}
 }
 
-func validateStructuredOutputFormat(t *testing.T, result *aikit.Thread) {
+func validateStructuredOutputFormat(t *testing.T, result *aikit.Session) {
 	t.Helper()
 
 	var output strings.Builder
-	for _, b := range result.Blocks {
+	for _, b := range result.GetBlocks() {
 		if b.Type == aikit.InferenceBlockText {
 			output.WriteString(b.Text)
 		}
@@ -429,8 +437,8 @@ func structuredOutputSchema() *aikit.JsonSchema {
 // HELPER FUNCTIONS
 // =============================================================================
 
-func snapshotResult(results aikit.Thread) string {
-	bytes, err := json.MarshalIndent(results.Blocks, "", "  ")
+func snapshotResult(result *aikit.Session) string {
+	bytes, err := json.MarshalIndent(result.GetBlocks(), "", "  ")
 	if err != nil {
 		panic(err)
 	}

@@ -6,7 +6,7 @@ func OpenAIProvider(key string) ProviderConfig {
 		BaseURL:             "https://api.openai.com",
 		APIKey:              key,
 		WebSearchToolName:   "web_search",
-		MakeSessionFunction: CreateResponsesSession,
+		APIProvider: ResponsesAPI,
 	}
 }
 
@@ -17,7 +17,7 @@ func OpenAIVerifiedProvider(key string) ProviderConfig {
 		APIKey:               key,
 		WebSearchToolName:    "web_search",
 		UseThinkingSummaries: true,
-		MakeSessionFunction:  CreateResponsesSession,
+		APIProvider:  ResponsesAPI,
 	}
 }
 
@@ -26,7 +26,7 @@ func FireworksProvider(key string) ProviderConfig {
 		Name:                "fireworks",
 		BaseURL:             "https://api.fireworks.ai/inference",
 		APIKey:              key,
-		MakeSessionFunction: CreateCompletionsSession,
+		APIProvider: CompletionsAPI,
 	}
 }
 func GroqProvider(key string) ProviderConfig {
@@ -34,7 +34,7 @@ func GroqProvider(key string) ProviderConfig {
 		Name:                "groq",
 		BaseURL:             "https://api.groq.com/openai",
 		APIKey:              key,
-		MakeSessionFunction: CreateCompletionsSession,
+		APIProvider: CompletionsAPI,
 	}
 }
 func AnthropicProvider(key string) ProviderConfig {
@@ -48,7 +48,7 @@ func AnthropicProvider(key string) ProviderConfig {
 			"interleaved-thinking-2025-05-14",
 		},
 		MaxTokens:           64_000,
-		MakeSessionFunction: CreateMessagesSession,
+		APIProvider: MessagesAPI,
 	}
 }
 func XAIProvider(key string) ProviderConfig {
@@ -56,7 +56,7 @@ func XAIProvider(key string) ProviderConfig {
 		Name:                "xai",
 		BaseURL:             "https://api.x.ai",
 		APIKey:              key,
-		MakeSessionFunction: CreateCompletionsSession,
+		APIProvider: CompletionsAPI,
 	}
 }
 func GoogleProvider(key string) ProviderConfig {
@@ -64,7 +64,7 @@ func GoogleProvider(key string) ProviderConfig {
 		Name:                "google",
 		BaseURL:             "https://generativelanguage.googleapis.com/v1beta/openai",
 		APIKey:              key,
-		MakeSessionFunction: CreateCompletionsSession,
+		APIProvider: CompletionsAPI,
 	}
 }
 func OpenRouterProvider(key string) ProviderConfig {
@@ -72,7 +72,7 @@ func OpenRouterProvider(key string) ProviderConfig {
 		Name:                "openrouter",
 		BaseURL:             "https://openrouter.ai/api",
 		APIKey:              key,
-		MakeSessionFunction: CreateResponsesSession,
+		APIProvider: ResponsesAPI,
 		WebSearchToolName:   "openrouter:web_search",
 	}
 }

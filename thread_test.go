@@ -4,49 +4,57 @@ import (
 	"testing"
 )
 
+func newTestStreamState() *StreamState {
+	return &StreamState{data: &thread{blocks: []*ThreadBlock{}}}
+}
+
+func newTestStreamStateWithCoalesce() *StreamState {
+	return &StreamState{data: &thread{blocks: []*ThreadBlock{}, coalesceTextBlocks: true}}
+}
+
 func TestUnit_Thread_IncompleteToolCallsCounter(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
+	state := newTestStreamState()
 
-	if thread.IncompleteToolCalls() != 0 {
-		t.Errorf("Initial IncompleteToolCalls should be 0, got %d", thread.IncompleteToolCalls())
+	if state.IncompleteToolCalls() != 0 {
+		t.Errorf("Initial IncompleteToolCalls should be 0, got %d", state.IncompleteToolCalls())
 	}
 
-	thread.ToolCall("call_1", "tool_a", "")
-	if thread.IncompleteToolCalls() != 1 {
-		t.Errorf("After 1st ToolCall, expected 1, got %d", thread.IncompleteToolCalls())
+	state.AppendToolCall("call_1", "tool_a", "")
+	if state.IncompleteToolCalls() != 1 {
+		t.Errorf("After 1st ToolCall, expected 1, got %d", state.IncompleteToolCalls())
 	}
 
-	thread.ToolCall("call_2", "tool_b", "")
-	if thread.IncompleteToolCalls() != 2 {
-		t.Errorf("After 2nd ToolCall, expected 2, got %d", thread.IncompleteToolCalls())
+	state.AppendToolCall("call_2", "tool_b", "")
+	if state.IncompleteToolCalls() != 2 {
+		t.Errorf("After 2nd ToolCall, expected 2, got %d", state.IncompleteToolCalls())
 	}
 
 	// Appending to existing tool call should NOT increment counter
-	thread.ToolCall("call_1", "", `{"more": "args"}`)
-	if thread.IncompleteToolCalls() != 2 {
-		t.Errorf("After appending args, expected 2, got %d", thread.IncompleteToolCalls())
+	state.AppendToolCall("call_1", "", `{"more": "args"}`)
+	if state.IncompleteToolCalls() != 2 {
+		t.Errorf("After appending args, expected 2, got %d", state.IncompleteToolCalls())
 	}
 
-	thread.ToolResult(thread.Blocks[0].ToolCall, "result_1")
-	if thread.IncompleteToolCalls() != 1 {
-		t.Errorf("After 1st ToolResult, expected 1, got %d", thread.IncompleteToolCalls())
+	state.AppendToolResult(state.Blocks()[0].ToolCall, "result_1")
+	if state.IncompleteToolCalls() != 1 {
+		t.Errorf("After 1st ToolResult, expected 1, got %d", state.IncompleteToolCalls())
 	}
 
-	thread.ToolResult(thread.Blocks[1].ToolCall, "result_2")
-	if thread.IncompleteToolCalls() != 0 {
-		t.Errorf("After 2nd ToolResult, expected 0, got %d", thread.IncompleteToolCalls())
+	state.AppendToolResult(state.Blocks()[1].ToolCall, "result_2")
+	if state.IncompleteToolCalls() != 0 {
+		t.Errorf("After 2nd ToolResult, expected 0, got %d", state.IncompleteToolCalls())
 	}
 }
 
 func TestUnit_Thread_CoalesceTextBlocks(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}, CoalesceTextBlocks: true}
-	thread.Text("text_1", "First")
-	thread.Text("text_2", " Second")
+	state := newTestStreamStateWithCoalesce()
+	state.AppendText("text_1", "First")
+	state.AppendText("text_2", " Second")
 
-	if len(thread.Blocks) != 2 {
-		t.Fatalf("Expected 2 blocks, got %d", len(thread.Blocks))
+	if len(state.Blocks()) != 2 {
+		t.Fatalf("Expected 2 blocks, got %d", len(state.Blocks()))
 	}
-	if !thread.Blocks[0].Continued {
+	if !state.Blocks()[0].Continued {
 		t.Error("First block should have Continued=true when coalescing")
 	}
 }
@@ -56,19 +64,19 @@ func TestUnit_Thread_CoalesceTextBlocks(t *testing.T) {
 // =============================================================================
 
 func TestUnit_Thread_ToolArgumentAccumulation(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.ToolCall("call_123", "search", "")
+	state := newTestStreamState()
+	state.AppendToolCall("call_123", "search", "")
 
 	chunks := []string{`{"`, `query":`, ` "hello`, ` world`, `"}`}
 	for _, chunk := range chunks {
-		thread.ToolCall("call_123", "", chunk)
+		state.AppendToolCall("call_123", "", chunk)
 	}
 
-	if len(thread.Blocks) != 1 {
-		t.Fatalf("Expected 1 block, got %d", len(thread.Blocks))
+	if len(state.Blocks()) != 1 {
+		t.Fatalf("Expected 1 block, got %d", len(state.Blocks()))
 	}
 
-	block := thread.Blocks[0]
+	block := state.Blocks()[0]
 	if block.ToolCall == nil {
 		t.Fatal("ToolCall is nil")
 	}
@@ -83,21 +91,21 @@ func TestUnit_Thread_ToolArgumentAccumulation(t *testing.T) {
 }
 
 func TestUnit_Thread_MultipleToolCallsAccumulation(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
+	state := newTestStreamState()
 
-	thread.ToolCall("call_1", "tool_a", "")
-	thread.ToolCall("call_2", "tool_b", "")
-	thread.ToolCall("call_1", "", `{"a": `)
-	thread.ToolCall("call_2", "", `{"b": `)
-	thread.ToolCall("call_1", "", `1}`)
-	thread.ToolCall("call_2", "", `2}`)
+	state.AppendToolCall("call_1", "tool_a", "")
+	state.AppendToolCall("call_2", "tool_b", "")
+	state.AppendToolCall("call_1", "", `{"a": `)
+	state.AppendToolCall("call_2", "", `{"b": `)
+	state.AppendToolCall("call_1", "", `1}`)
+	state.AppendToolCall("call_2", "", `2}`)
 
-	if len(thread.Blocks) != 2 {
-		t.Fatalf("Expected 2 blocks, got %d", len(thread.Blocks))
+	if len(state.Blocks()) != 2 {
+		t.Fatalf("Expected 2 blocks, got %d", len(state.Blocks()))
 	}
 
 	var block1, block2 *ThreadBlock
-	for _, b := range thread.Blocks {
+	for _, b := range state.Blocks() {
 		if b.ID == "call_1" {
 			block1 = b
 		} else if b.ID == "call_2" {
@@ -120,60 +128,60 @@ func TestUnit_Thread_MultipleToolCallsAccumulation(t *testing.T) {
 }
 
 func TestUnit_Thread_CoalesceMultipleTextBlocks(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}, CoalesceTextBlocks: true}
+	state := newTestStreamStateWithCoalesce()
 
 	// Create first block
-	thread.Text("text_1", "Hello")
+	state.AppendText("text_1", "Hello")
 	// Create second block - should coalesce to first since last block is text
-	thread.Text("text_2", " World")
+	state.AppendText("text_2", " World")
 	// Create third block - should coalesce (second block marked as continued)
-	thread.Text("text_3", "!")
+	state.AppendText("text_3", "!")
 
-	if len(thread.Blocks) != 3 {
-		t.Fatalf("Expected 3 blocks, got %d", len(thread.Blocks))
+	if len(state.Blocks()) != 3 {
+		t.Fatalf("Expected 3 blocks, got %d", len(state.Blocks()))
 	}
 
 	// First and second should be marked as continued
-	if !thread.Blocks[0].Continued {
+	if !state.Blocks()[0].Continued {
 		t.Error("First block should have Continued=true")
 	}
-	if !thread.Blocks[1].Continued {
+	if !state.Blocks()[1].Continued {
 		t.Error("Second block should have Continued=true")
 	}
 	// Third should NOT be continued (it's the last one)
-	if thread.Blocks[2].Continued {
+	if state.Blocks()[2].Continued {
 		t.Error("Third block should NOT have Continued=true")
 	}
 
 	// Each block keeps its own text
-	if thread.Blocks[0].Text != "Hello" {
-		t.Errorf("First block should have 'Hello', got %q", thread.Blocks[0].Text)
+	if state.Blocks()[0].Text != "Hello" {
+		t.Errorf("First block should have 'Hello', got %q", state.Blocks()[0].Text)
 	}
-	if thread.Blocks[1].Text != " World" {
-		t.Errorf("Second block should have ' World', got %q", thread.Blocks[1].Text)
+	if state.Blocks()[1].Text != " World" {
+		t.Errorf("Second block should have ' World', got %q", state.Blocks()[1].Text)
 	}
-	if thread.Blocks[2].Text != "!" {
-		t.Errorf("Third block should have '!', got %q", thread.Blocks[2].Text)
+	if state.Blocks()[2].Text != "!" {
+		t.Errorf("Third block should have '!', got %q", state.Blocks()[2].Text)
 	}
 }
 
 func TestUnit_Thread_CoalesceBreaksOnDifferentBlockType(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}, CoalesceTextBlocks: true}
+	state := newTestStreamStateWithCoalesce()
 
-	thread.Text("text_1", "Hello")
-	thread.ToolCall("call_1", "search", "{}")
-	thread.Text("text_2", " World") // Last block is ToolCall, NOT Text - no coalescing
+	state.AppendText("text_1", "Hello")
+	state.AppendToolCall("call_1", "search", "{}")
+	state.AppendText("text_2", " World") // Last block is ToolCall, NOT Text - no coalescing
 
 	// Coalescing should NOT happen since last block was a tool call
 	// First text block should NOT be marked as continued (no following text block)
-	if thread.Blocks[0].Text != "Hello" {
-		t.Errorf("First block should have 'Hello', got %q", thread.Blocks[0].Text)
+	if state.Blocks()[0].Text != "Hello" {
+		t.Errorf("First block should have 'Hello', got %q", state.Blocks()[0].Text)
 	}
-	if thread.Blocks[2].Text != " World" {
-		t.Errorf("Third block should have ' World', got %q", thread.Blocks[2].Text)
+	if state.Blocks()[2].Text != " World" {
+		t.Errorf("Third block should have ' World', got %q", state.Blocks()[2].Text)
 	}
 	// First block should NOT be continued since the following block is a tool call
-	if thread.Blocks[0].Continued {
+	if state.Blocks()[0].Continued {
 		t.Error("First text block should NOT have Continued=true when followed by tool call")
 	}
 }
@@ -190,104 +198,104 @@ func TestUnit_Thread_CoalesceBreaksOnDifferentBlockType(t *testing.T) {
 func TestUnit_Thread_MutationMethodsSetUpdated(t *testing.T) {
 	tests := []struct {
 		name   string
-		mutate func(thread *Thread)
+		mutate func(state *StreamState)
 	}{
 		{
 			name: "Text",
-			mutate: func(thread *Thread) {
-				thread.Text("id", "hello")
+			mutate: func(state *StreamState) {
+				state.AppendText("id", "hello")
 			},
 		},
 		{
 			name: "Cite",
-			mutate: func(thread *Thread) {
-				thread.Cite("id", "citation")
+			mutate: func(state *StreamState) {
+				state.AppendCite("id", "citation")
 			},
 		},
 		{
 			name: "Thinking",
-			mutate: func(thread *Thread) {
-				thread.Thinking("id", "thinking")
+			mutate: func(state *StreamState) {
+				state.AppendThinking("id", "thinking")
 			},
 		},
 		{
 			name: "ThinkingWithSignature",
-			mutate: func(thread *Thread) {
-				thread.ThinkingWithSignature("id", "thinking", "sig")
+			mutate: func(state *StreamState) {
+				state.AppendThinkingWithSignature("id", "thinking", "sig")
 			},
 		},
 		{
 			name: "ThinkingSignature",
-			mutate: func(thread *Thread) {
-				thread.ThinkingSignature("id", "sig")
+			mutate: func(state *StreamState) {
+				state.AppendThinkingSignature("id", "sig")
 			},
 		},
 		{
 			name: "ToolCall_new",
-			mutate: func(thread *Thread) {
-				thread.ToolCall("id", "tool", "{}")
+			mutate: func(state *StreamState) {
+				state.AppendToolCall("id", "tool", "{}")
 			},
 		},
 		{
 			name: "ToolCall_append_args",
-			mutate: func(thread *Thread) {
-				thread.ToolCall("id", "tool", "")
-				thread.TakeUpdate() // clear
-				thread.ToolCall("id", "", `{"arg": 1}`)
+			mutate: func(state *StreamState) {
+				state.AppendToolCall("id", "tool", "")
+				state.TakeUpdate() // clear
+				state.AppendToolCall("id", "", `{"arg": 1}`)
 			},
 		},
 		{
 			name: "ToolCallWithThinking",
-			mutate: func(thread *Thread) {
-				thread.ToolCallWithThinking("id", "tool", "{}", "thinking", "sig")
+			mutate: func(state *StreamState) {
+				state.AppendToolCallWithThinking("id", "tool", "{}", "thinking", "sig")
 			},
 		},
 		{
 			name: "ToolResult",
-			mutate: func(thread *Thread) {
-				thread.ToolCall("id", "tool", "{}")
-				thread.TakeUpdate() // clear
-				thread.ToolResult(thread.Blocks[0].ToolCall, "result")
+			mutate: func(state *StreamState) {
+				state.AppendToolCall("id", "tool", "{}")
+				state.TakeUpdate() // clear
+				state.AppendToolResult(state.Blocks()[0].ToolCall, "result")
 			},
 		},
 		{
 			name: "WebSearch",
-			mutate: func(thread *Thread) {
-				thread.WebSearch("id")
+			mutate: func(state *StreamState) {
+				state.AppendWebSearch("id")
 			},
 		},
 		{
 			name: "CompleteWebSearch",
-			mutate: func(thread *Thread) {
-				thread.WebSearch("id")
-				thread.TakeUpdate() // clear
-				thread.CompleteWebSearch("id")
+			mutate: func(state *StreamState) {
+				state.AppendWebSearch("id")
+				state.TakeUpdate() // clear
+				state.AppendCompleteWebSearch("id")
 			},
 		},
 		{
 			name: "ViewWebpageUrl",
-			mutate: func(thread *Thread) {
-				thread.ViewWebpage("id")
-				thread.TakeUpdate() // clear (if any)
-				thread.ViewWebpageUrl("id", "https://example.com")
+			mutate: func(state *StreamState) {
+				state.AppendViewWebpage("id")
+				state.TakeUpdate() // clear (if any)
+				state.AppendViewWebpageUrl("id", "https://example.com")
 			},
 		},
 		{
 			name: "Complete_with_UpdateOnFinalize",
-			mutate: func(thread *Thread) {
-				thread.UpdateOnFinalize = true
-				thread.Text("id", "content")
-				thread.TakeUpdate() // clear
-				thread.Complete("id")
+			mutate: func(state *StreamState) {
+				state.data.updateOnFinalize = true
+				state.AppendText("id", "content")
+				state.TakeUpdate() // clear
+				state.CompleteBlock("id")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			thread := &Thread{Blocks: []*ThreadBlock{}}
-			tt.mutate(thread)
-			if !thread.TakeUpdate() {
+			state := newTestStreamState()
+			tt.mutate(state)
+			if !state.TakeUpdate() {
 				t.Errorf("%s should set updated flag", tt.name)
 			}
 		})
@@ -296,31 +304,31 @@ func TestUnit_Thread_MutationMethodsSetUpdated(t *testing.T) {
 
 // TestUnit_Thread_TakeUpdate verifies TakeUpdate behavior.
 func TestUnit_Thread_TakeUpdate(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
+	state := newTestStreamState()
 
 	// Initially false
-	if thread.TakeUpdate() {
+	if state.TakeUpdate() {
 		t.Error("TakeUpdate should return false on fresh thread")
 	}
 
 	// After mutation, returns true
-	thread.Text("id", "hello")
-	if !thread.TakeUpdate() {
+	state.AppendText("id", "hello")
+	if !state.TakeUpdate() {
 		t.Error("TakeUpdate should return true after mutation")
 	}
 
 	// After taking, returns false
-	if thread.TakeUpdate() {
+	if state.TakeUpdate() {
 		t.Error("TakeUpdate should return false after being taken")
 	}
 
 	// Multiple mutations, single take
-	thread.Text("id", " world")
-	thread.Thinking("id2", "hmm")
-	if !thread.TakeUpdate() {
+	state.AppendText("id", " world")
+	state.AppendThinking("id2", "hmm")
+	if !state.TakeUpdate() {
 		t.Error("TakeUpdate should return true after multiple mutations")
 	}
-	if thread.TakeUpdate() {
+	if state.TakeUpdate() {
 		t.Error("TakeUpdate should return false after being taken")
 	}
 }

@@ -29,8 +29,53 @@ type JsonSchema struct {
 
 type ToolJsonSchema = JsonSchema
 
-func GetTools(filename string) map[string]JsonSchema {
-	var defs map[string]JsonSchema
+// BoundTool pairs a ToolDefinition with its handler function.
+type BoundTool struct {
+	Definition ToolDefinition
+	Handle     func(args string) string
+}
+
+// SchemaObject creates an object JsonSchema with the given properties and required fields.
+func SchemaObject(properties map[string]*JsonSchema, required ...string) *JsonSchema {
+	return &JsonSchema{
+		Type:       "object",
+		Properties: &properties,
+		Required:   required,
+	}
+}
+
+// SchemaString creates a string JsonSchema with an optional description.
+func SchemaString(description string) *JsonSchema {
+	return &JsonSchema{Type: "string", Description: description}
+}
+
+// SchemaNumber creates a number JsonSchema with an optional description.
+func SchemaNumber(description string) *JsonSchema {
+	return &JsonSchema{Type: "number", Description: description}
+}
+
+// SchemaInteger creates an integer JsonSchema with an optional description.
+func SchemaInteger(description string) *JsonSchema {
+	return &JsonSchema{Type: "integer", Description: description}
+}
+
+// SchemaBoolean creates a boolean JsonSchema with an optional description.
+func SchemaBoolean(description string) *JsonSchema {
+	return &JsonSchema{Type: "boolean", Description: description}
+}
+
+// SchemaArray creates an array JsonSchema with the given items schema.
+func SchemaArray(items *JsonSchema) *JsonSchema {
+	return &JsonSchema{Type: "array", Items: items}
+}
+
+// SchemaEnum creates an enum JsonSchema with the given values.
+func SchemaEnum(values ...any) *JsonSchema {
+	return &JsonSchema{Enum: values}
+}
+
+func GetTools(filename string) map[string]ToolDefinition {
+	var defs map[string]ToolDefinition
 	bytes, err := os.ReadFile(filename)
 	if err != nil {
 		panic("failed to read tool definitions: " + err.Error())

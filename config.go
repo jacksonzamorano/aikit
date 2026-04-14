@@ -24,11 +24,26 @@ type ProviderConfig struct {
 	UseThinkingSummaries bool
 	MaxTokens            int64
 
-	MakeSessionFunction func(*ProviderConfig) *Session
+	APIProvider func(*ProviderConfig) APIRequest
 }
 
 func (c *ProviderConfig) Session() *Session {
-	return c.MakeSessionFunction(c)
+	return &Session{
+		data:     newThread(),
+		Provider: c.APIProvider(c),
+	}
+}
+
+func ResponsesAPI(c *ProviderConfig) APIRequest {
+	return &ResponsesAPIRequest{Config: c}
+}
+
+func MessagesAPI(c *ProviderConfig) APIRequest {
+	return &MessagesAPIRequest{Config: c}
+}
+
+func CompletionsAPI(c *ProviderConfig) APIRequest {
+	return &CompletionsAPIRequest{Config: c}
 }
 
 func (c ProviderConfig) resolveEndpoint(defaultPath string) string {

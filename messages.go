@@ -24,8 +24,8 @@ type MessagesAPIRequest struct {
 	lastToolCall messagesLastToolCall
 }
 
-func (p *MessagesAPIRequest) blockId(thread *Thread, index int) string {
-	return fmt.Sprintf("%s.%d", thread.ThreadId, index)
+func (p *MessagesAPIRequest) blockId(thread *StreamState, index int) string {
+	return fmt.Sprintf("%s.%d", thread.ThreadId(), index)
 }
 
 func (p *MessagesAPIRequest) Name() string {
@@ -38,24 +38,25 @@ func (p *MessagesAPIRequest) Transport() GatewayTransport {
 
 func (p *MessagesAPIRequest) PrepareForUpdates() {}
 
-func (p *MessagesAPIRequest) InitSession(thread *Thread) {
+func (p *MessagesAPIRequest) InitSession(thread *StreamState) {
 	tools := make([]map[string]any, 0)
-	for name := range thread.Tools {
+	threadTools := thread.Tools()
+	for name := range threadTools {
 		toolSpec := map[string]any{}
-		toolSpec["description"] = thread.Tools[name].Description
-		toolSpec["input_schema"] = thread.Tools[name].Parameters
+		toolSpec["description"] = threadTools[name].Description
+		toolSpec["input_schema"] = threadTools[name].Parameters
 		toolSpec["name"] = name
 		tools = append(tools, toolSpec)
 	}
 
-	if thread.MaxWebSearches > 0 && p.Config.WebSearchToolName != "" {
+	if thread.MaxWebSearches() > 0 && p.Config.WebSearchToolName != "" {
 		tools = append(tools, map[string]any{
 			"type":     p.Config.WebSearchToolName,
 			"name":     "web_search",
-			"max_uses": thread.MaxWebSearches,
+			"max_uses": thread.MaxWebSearches(),
 		})
 	}
-	if thread.WebFetchEnabled && p.Config.WebFetchToolName != "" {
+	if thread.WebFetchEnabled() && p.Config.WebFetchToolName != "" {
 		tools = append(tools, map[string]any{
 			"type": p.Config.WebFetchToolName,
 			"name": "web_fetch",
@@ -64,7 +65,7 @@ func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 
 	p.request = MessagesRequest{
 		Messages:  []MessagesMessage{},
-		Model:     thread.Model,
+		Model:     thread.Model(),
 		Tools:     tools,
 		MaxTokens: p.Config.MaxTokens,
 		Stream:    true,
@@ -76,9 +77,9 @@ func (p *MessagesAPIRequest) InitSession(thread *Thread) {
 		}
 	}
 
-	if thread.Reasoning.Budget > 0 {
+	if thread.Reasoning().Budget > 0 {
 		p.request.Thinking = &MessagesThinking{
-			BudgetTokens: int64(thread.Reasoning.Budget),
+			BudgetTokens: int64(thread.Reasoning().Budget),
 			Type:         "enabled",
 		}
 	}
@@ -186,7 +187,7 @@ func (p *MessagesAPIRequest) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *MessagesAPIRequest) MakeRequest(thread *Thread) *http.Request {
+func (p *MessagesAPIRequest) MakeRequest(thread *StreamState) *http.Request {
 	endpoint := p.Config.resolveEndpoint("/v1/messages")
 	body, _ := json.Marshal(p.request)
 	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
@@ -214,7 +215,7 @@ func (p *MessagesAPIRequest) MakeRequest(thread *Thread) *http.Request {
 	return providerReq
 }
 
-func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
+func (p *MessagesAPIRequest) OnChunk(data []byte, thread *StreamState) ChunkResult {
 	var env MessagesStreamEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
@@ -239,22 +240,22 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 		var ms MessagesStreamMessageStart
 		if err := json.Unmarshal(data, &ms); err == nil {
 			if ms.Message.ID != "" {
-				thread.ThreadId = ms.Message.ID
+				thread.SetThreadId(ms.Message.ID)
 			}
 			usage := ms.Message.Usage
-			thread.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
-			thread.Result.CacheReadTokens += usage.CacheReadInputTokens
-			thread.Result.CacheWriteTokens += usage.CacheCreationInputTokens
-			thread.Result.OutputTokens += usage.OutputTokens
+			thread.AddInputTokens(usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens)
+			thread.AddCacheReadTokens(usage.CacheReadInputTokens)
+			thread.AddCacheWriteTokens(usage.CacheCreationInputTokens)
+			thread.AddOutputTokens(usage.OutputTokens)
 		}
 	case "message_delta":
 		var md MessagesStreamMessageDelta
 		if err := json.Unmarshal(data, &md); err == nil {
 			usage := md.Usage
-			thread.Result.InputTokens += usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens
-			thread.Result.OutputTokens += usage.OutputTokens
-			thread.Result.CacheReadTokens += usage.CacheReadInputTokens
-			thread.Result.CacheWriteTokens += usage.CacheCreationInputTokens
+			thread.AddInputTokens(usage.InputTokens - usage.CacheReadInputTokens - usage.CacheCreationInputTokens)
+			thread.AddOutputTokens(usage.OutputTokens)
+			thread.AddCacheReadTokens(usage.CacheReadInputTokens)
+			thread.AddCacheWriteTokens(usage.CacheCreationInputTokens)
 		}
 	case "content_block_start":
 		var cbs MessagesStreamContentBlockStart
@@ -264,10 +265,10 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 		blockId := p.blockId(thread, cbs.Index)
 		switch cbs.ContentBlock.Type {
 		case "thinking":
-			thread.Thinking(blockId, cbs.ContentBlock.Thinking)
-			thread.ThinkingSignature(blockId, cbs.ContentBlock.Signature)
+			thread.AppendThinking(blockId, cbs.ContentBlock.Thinking)
+			thread.AppendThinkingSignature(blockId, cbs.ContentBlock.Signature)
 		case "redacted_thinking":
-			thread.EncryptedThinking(cbs.ContentBlock.Data)
+			thread.AppendEncryptedThinking(cbs.ContentBlock.Data)
 		case "tool_use":
 			// In streaming mode, input comes via input_json_delta events, so we start with empty arguments.
 			// Only use the initial input if it's not empty (non-streaming or complete input).
@@ -275,19 +276,19 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 			if len(cbs.ContentBlock.Input) > 0 && string(cbs.ContentBlock.Input) != "{}" {
 				initialArgs = string(cbs.ContentBlock.Input)
 			}
-			thread.ToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, initialArgs)
+			thread.AppendToolCall(cbs.ContentBlock.ID, cbs.ContentBlock.Name, initialArgs)
 			p.lastToolCall = messagesLastToolCall{ID: cbs.ContentBlock.ID, IsServer: false}
 		case "server_tool_use":
 			switch cbs.ContentBlock.Name {
 			case "web_search":
-				thread.WebSearch(cbs.ContentBlock.ID)
+				thread.AppendWebSearch(cbs.ContentBlock.ID)
 				p.lastToolCall = messagesLastToolCall{
 					ID:       cbs.ContentBlock.ID,
 					IsServer: true,
 					ToolName: "web_search",
 				}
 			case "web_fetch":
-				thread.ViewWebpage(cbs.ContentBlock.ID)
+				thread.AppendViewWebpage(cbs.ContentBlock.ID)
 				p.lastToolCall = messagesLastToolCall{
 					ID:       cbs.ContentBlock.ID,
 					IsServer: true,
@@ -296,14 +297,14 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 			}
 		case "web_search_tool_result":
 			for _, search := range cbs.ContentBlock.Content {
-				thread.WebSearchResult(cbs.ContentBlock.ToolUseId, ThreadWebSearchResult{
+				thread.AppendWebSearchResult(cbs.ContentBlock.ToolUseId, ThreadWebSearchResult{
 					Title: search.Title,
 					URL:   search.URL,
 				})
 			}
-			thread.CompleteWebSearch(cbs.ContentBlock.ToolUseId)
+			thread.AppendCompleteWebSearch(cbs.ContentBlock.ToolUseId)
 		case "text":
-			thread.Text(blockId, cbs.ContentBlock.Text)
+			thread.AppendText(blockId, cbs.ContentBlock.Text)
 		}
 	case "content_block_delta":
 		var cbd MessagesStreamContentDelta
@@ -314,15 +315,15 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 
 		switch cbd.Delta.Type {
 		case "text_delta":
-			thread.Text(blockId, cbd.Delta.Text)
+			thread.AppendText(blockId, cbd.Delta.Text)
 		case "citations_delta":
 			if cbd.Delta.Citation != nil {
-				thread.Cite(blockId, cbd.Delta.Citation.Url)
+				thread.AppendCite(blockId, cbd.Delta.Citation.Url)
 			}
 		case "thinking_delta":
-			thread.Thinking(blockId, cbd.Delta.Thinking)
+			thread.AppendThinking(blockId, cbd.Delta.Thinking)
 		case "signature_delta":
-			thread.ThinkingSignature(blockId, cbd.Delta.Signature)
+			thread.AppendThinkingSignature(blockId, cbd.Delta.Signature)
 		case "input_json_delta":
 			if p.lastToolCall.IsServer {
 				p.lastToolCall.Buffer += cbd.Delta.PartialJSON
@@ -330,16 +331,16 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 				case "web_search":
 					var output MessagesWebSearchQuery
 					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err == nil {
-						thread.WebSearchQuery(p.lastToolCall.ID, output.Query)
+						thread.AppendWebSearchQuery(p.lastToolCall.ID, output.Query)
 					}
 				case "web_fetch":
 					var output MessagesWebFetchQuery
 					if err := json.Unmarshal([]byte(p.lastToolCall.Buffer), &output); err == nil {
-						thread.ViewWebpageUrl(p.lastToolCall.ID, output.URL)
+						thread.AppendViewWebpageUrl(p.lastToolCall.ID, output.URL)
 					}
 				}
 			} else {
-				thread.ToolCall(p.lastToolCall.ID, "", cbd.Delta.PartialJSON)
+				thread.AppendToolCall(p.lastToolCall.ID, "", cbd.Delta.PartialJSON)
 			}
 		}
 	case "content_block_stop":
@@ -347,7 +348,7 @@ func (p *MessagesAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult {
 		if err := json.Unmarshal(data, &cbst); err != nil {
 			return ErrorChunkResult(DecodingError(p.Name(), err.Error()))
 		}
-		thread.Complete(p.blockId(thread, cbst.Index))
+		thread.CompleteBlock(p.blockId(thread, cbst.Index))
 	case "message_stop":
 		return DoneChunkResult()
 	}

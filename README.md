@@ -33,9 +33,9 @@ func main() {
     provider := aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY"))
     session := provider.Session()
 
-    session.Thread.Model = "claude-sonnet-4-20250514"
-    session.Thread.System("You are a helpful assistant.")
-    session.Thread.Input("What is the capital of France?")
+    session.Model = "claude-sonnet-4-20250514"
+    session.System("You are a helpful assistant.")
+    session.Input("What is the capital of France?")
 
     result := session.Stream(func(thread *aikit.Thread) {
         // Called on each streaming update
@@ -75,7 +75,7 @@ config := aikit.ProviderConfig{
     Name:                "custom",
     BaseURL:             "https://api.example.com",
     APIKey:              "your-key",
-    MakeSessionFunction: aikit.CreateCompletionsSession,
+    APIProvider: aikit.CompletionsAPI,
 }
 session := config.Session()
 ```
@@ -102,12 +102,12 @@ func main() {
     provider := aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY"))
     session := provider.Session()
 
-    session.Thread.Model = "claude-sonnet-4-20250514"
-    session.Thread.System("You are a helpful assistant.")
-    session.Thread.Input("What time is it in New York?")
+    session.Model = "claude-sonnet-4-20250514"
+    session.System("You are a helpful assistant.")
+    session.Input("What time is it in New York?")
 
     // Define available tools
-	    session.Thread.Tools = map[string]aikit.ToolDefinition{
+	    session.Tools = map[string]aikit.ToolDefinition{
 	        "get_time": {
 	            Description: "Get the current time for a timezone",
 	            Parameters: &aikit.JsonSchema{
@@ -124,7 +124,7 @@ func main() {
     }
 
     // Handle tool calls
-    session.Thread.HandleToolFunction = func(name string, args string) string {
+    session.HandleToolFunction = func(name string, args string) string {
         switch name {
         case "get_time":
             var params struct {
@@ -159,10 +159,10 @@ Enable web search for supported providers:
 provider := aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY"))
 session := provider.Session()
 
-session.Thread.Model = "claude-sonnet-4-20250514"
-session.Thread.MaxWebSearches = 3 // Allow up to 3 web searches
-session.Thread.System("You are a helpful assistant with access to the web.")
-session.Thread.Input("What are the latest developments in Go 1.23?")
+session.Model = "claude-sonnet-4-20250514"
+session.MaxWebSearches = 3 // Allow up to 3 web searches
+session.System("You are a helpful assistant with access to the web.")
+session.Input("What are the latest developments in Go 1.23?")
 
 result := session.Stream(func(thread *aikit.Thread) {
     for _, block := range thread.Blocks {
@@ -181,9 +181,9 @@ Enable reasoning/thinking output:
 provider := aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY"))
 session := provider.Session()
 
-session.Thread.Model = "claude-sonnet-4-20250514"
-session.Thread.Reasoning.Budget = 1024 // Token budget for thinking
-session.Thread.Input("Solve this step by step: What is 15% of 340?")
+session.Model = "claude-sonnet-4-20250514"
+session.Reasoning.Budget = 1024 // Token budget for thinking
+session.Input("Solve this step by step: What is 15% of 340?")
 
 result := session.Stream(func(thread *aikit.Thread) {
     for _, block := range thread.Blocks {
@@ -202,11 +202,11 @@ Provide a JSON schema to request structured output:
 provider := aikit.OpenAIProvider(os.Getenv("OPENAI_KEY"))
 session := provider.Session()
 
-session.Thread.Model = "gpt-4.1-mini"
-session.Thread.System("Return a short answer in JSON.")
-session.Thread.Input("What is the capital of France?")
+session.Model = "gpt-4.1-mini"
+session.System("Return a short answer in JSON.")
+session.Input("What is the capital of France?")
 
-session.Thread.StructuredOutputSchema = &aikit.JsonSchema{
+session.StructuredOutputSchema = &aikit.JsonSchema{
     Type: "object",
     Properties: &map[string]*aikit.JsonSchema{
         "answer": {Type: "string"},
@@ -215,7 +215,7 @@ session.Thread.StructuredOutputSchema = &aikit.JsonSchema{
 }
 
 strict := true
-session.Thread.StructuredOutputStrict = &strict
+session.StructuredOutputStrict = &strict
 
 result := session.Stream(func(thread *aikit.Thread) {
     // Handle streaming updates

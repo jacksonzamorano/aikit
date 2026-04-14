@@ -3,13 +3,13 @@ package aikit
 import "testing"
 
 func TestStructuredOutputResponsesRequest(t *testing.T) {
-	thread := &Thread{
-		Model:                  "gpt-5-nano",
-		StructuredOutputSchema: exampleStructuredSchema(),
-	}
+	state := &StreamState{data: &thread{
+		model:                  "gpt-5-nano",
+		structuredOutputSchema: exampleStructuredSchema(),
+	}}
 
 	request := ResponsesAPIRequest{Config: &ProviderConfig{Name: "openai"}}
-	request.InitSession(thread)
+	request.InitSession(state)
 
 	if request.Request.Text == nil || request.Request.Text.Format == nil {
 		t.Fatalf("expected response_format to be set")
@@ -27,14 +27,14 @@ func TestStructuredOutputResponsesRequest(t *testing.T) {
 
 func TestStructuredOutputCompletionsRequest(t *testing.T) {
 	strict := false
-	thread := &Thread{
-		Model:                  "openai/gpt-oss-20b",
-		StructuredOutputSchema: exampleStructuredSchema(),
-		StructuredOutputStrict: &strict,
-	}
+	state := &StreamState{data: &thread{
+		model:                  "openai/gpt-oss-20b",
+		structuredOutputSchema: exampleStructuredSchema(),
+		structuredOutputStrict: &strict,
+	}}
 
 	request := CompletionsAPIRequest{Config: &ProviderConfig{Name: "groq"}}
-	request.InitSession(thread)
+	request.InitSession(state)
 
 	if request.request.ResponseFormat == nil {
 		t.Fatalf("expected response_format to be set")
@@ -45,13 +45,13 @@ func TestStructuredOutputCompletionsRequest(t *testing.T) {
 }
 
 func TestStructuredOutputMessagesRequest(t *testing.T) {
-	thread := &Thread{
-		Model:                  "claude-haiku-4-5-20251001",
-		StructuredOutputSchema: exampleStructuredSchema(),
-	}
+	state := &StreamState{data: &thread{
+		model:                  "claude-haiku-4-5-20251001",
+		structuredOutputSchema: exampleStructuredSchema(),
+	}}
 
 	request := MessagesAPIRequest{Config: &ProviderConfig{Name: "anthropic"}}
-	request.InitSession(thread)
+	request.InitSession(state)
 
 	if request.request.OutputFormat == nil {
 		t.Fatalf("expected output_format to be set")
