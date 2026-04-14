@@ -1,9 +1,6 @@
 package aikit
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 type ThreadBlockType string
 
@@ -20,31 +17,31 @@ const (
 )
 
 type ThreadToolCall struct {
-	ID        string `json:"id" xml:"id,attr"`
-	Name      string `json:"name" xml:"name,attr"`
-	Arguments string `json:"arguments" xml:"arguments"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 type ThreadToolResult struct {
-	ToolCallID string `json:"tool_call_id" xml:"tool_call_id,attr"`
-	Output     string `json:"output" xml:"output"`
+	ToolCallID string `json:"tool_call_id"`
+	Output     string `json:"output"`
 }
 
 type ThreadWebSearch struct {
-	Query   string                  `json:"query" xml:"query,attr"`
-	Results []ThreadWebSearchResult `json:"results" xml:"results>result"`
+	Query   string                  `json:"query"`
+	Results []ThreadWebSearchResult `json:"results"`
 }
 
 type ThreadWebSearchResult struct {
-	Title string `json:"title" xml:"title,attr"`
-	URL   string `json:"url" xml:"url,attr"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }
 
 // ThreadImage represents image data for vision input.
 // Images are always stored as base64-encoded strings.
 type ThreadImage struct {
-	Base64    string `json:"base64" xml:"base64"`
-	MediaType string `json:"media_type" xml:"media_type,attr"`
+	Base64    string `json:"base64"`
+	MediaType string `json:"media_type"`
 }
 
 // GetBase64 returns the base64-encoded image data.
@@ -59,46 +56,17 @@ func (img *ThreadImage) GetDataURL() string {
 }
 
 type ThreadBlock struct {
-	ID   string          `json:"id,omitempty" xml:"id,attr,omitempty"`
-	Type ThreadBlockType `json:"type" xml:"type,attr"`
+	ID   string          `json:"id,omitempty"`
+	Type ThreadBlockType `json:"type"`
 
-	Text       string            `json:"text,omitempty" xml:"text,omitempty"`
-	Signature  string            `json:"signature,omitempty" xml:"signature,omitempty"`
-	ToolCall   *ThreadToolCall   `json:"tool_call,omitempty" xml:"tool_call,omitempty"`
-	ToolResult *ThreadToolResult `json:"tool_result,omitempty" xml:"tool_result,omitempty"`
-	WebSearch  *ThreadWebSearch  `json:"web_search,omitempty" xml:"web_search,omitempty"`
-	Image      *ThreadImage      `json:"image,omitempty" xml:"image,omitempty"`
-	Complete   bool              `json:"complete" xml:"complete,attr"`
-	Continued  bool              `json:"continued,omitempty" xml:"continued,attr,omitempty"`
-	Citations  []string          `json:"citations,omitempty" xml:"citations>citation,omitempty"`
-	ProviderID string            `json:"provider_id,omitempty" xml:"provider_id,attr,omitempty"`
-}
-
-func (b *ThreadBlock) Description() string {
-	switch b.Type {
-	case InferenceBlockSystem:
-		return "| System: " + strings.ReplaceAll(b.Text, "\n", "\n|\t")
-	case InferenceBlockInput:
-		return "\n> " + strings.ReplaceAll(b.Text, "\n", "\n|\t")
-	case InferenceBlockInputImage:
-		if b.Image != nil {
-			size := len(b.Image.Base64) * 3 / 4 // Approximate decoded size
-			return fmt.Sprintf("| Image: [%s, ~%d bytes]", b.Image.MediaType, size)
-		}
-		return "| Image: [embedded]"
-	case InferenceBlockThinking:
-		return "| Thinking: " + strings.ReplaceAll(b.Text, "\n", "\n|\t")
-	case InferenceBlockEncryptedThinking:
-		return "| Thinking: [redacted]"
-	case InferenceBlockText:
-		return "\n\n" + b.Text
-	case InferenceBlockToolCall:
-		return fmt.Sprintf("-> %s\n<- %s", b.ToolCall.Name, string(b.ToolResult.Output))
-	case InferenceBlockWebSearch:
-		return fmt.Sprintf("| Searched for '%s'", b.WebSearch.Query)
-	case InferenceBlockViewWebpage:
-		return fmt.Sprintf("| Viewed '%s'", b.Text)
-	default:
-		return ""
-	}
+	Text       string            `json:"text,omitempty"`
+	Signature  string            `json:"signature,omitempty"`
+	ToolCall   *ThreadToolCall   `json:"tool_call,omitempty"`
+	ToolResult *ThreadToolResult `json:"tool_result,omitempty"`
+	WebSearch  *ThreadWebSearch  `json:"web_search,omitempty"`
+	Image      *ThreadImage      `json:"image,omitempty"`
+	Complete   bool              `json:"complete"`
+	Continued  bool              `json:"continued,omitempty"`
+	Citations  []string          `json:"citations,omitempty"`
+	ProviderID string            `json:"provider_id,omitempty"`
 }

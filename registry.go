@@ -68,3 +68,12 @@ func XAIProvider(key string) ProviderConfig {
 		MakeSessionFunction: CreateCompletionsSession,
 	}
 }
+func OpenRouterProvider(key string) ProviderConfig {
+	return ProviderConfig{
+		Name:                "openrouter",
+		BaseURL:             "https://openrouter.ai/api/v1",
+		APIKey:              key,
+		MakeSessionFunction: CreateResponsesSession,
+		WebSearchToolName:   "openrouter:web_search",
+	}
+}

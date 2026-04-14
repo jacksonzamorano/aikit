@@ -7,8 +7,8 @@ import (
 )
 
 type ToolDefinition struct {
-	Description string      `json:"description,omitempty" xml:"description,omitempty"`
-	Parameters  *JsonSchema `json:"parameters,omitempty" xml:"parameters,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Parameters  *JsonSchema `json:"parameters,omitempty"`
 }
 
 type JsonSchema struct {
@@ -18,7 +18,7 @@ type JsonSchema struct {
 	Items       *JsonSchema             `json:"items,omitempty"`
 	Required    []string                `json:"required,omitempty"`
 
-	Enum []any `json:"enum,omitempty" xml:"enum>value,omitempty"`
+	Enum []any `json:"enum,omitempty"`
 
 	OneOf []*JsonSchema `json:"oneOf,omitempty"`
 	AnyOf []*JsonSchema `json:"anyOf,omitempty"`

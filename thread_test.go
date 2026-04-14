@@ -466,3 +466,39 @@ func TestUnit_Thread_TakeUpdate(t *testing.T) {
 		t.Error("TakeUpdate should return false after being taken")
 	}
 }
+
+func TestUnit_Thread_FinalText(t *testing.T) {
+	thread := &Thread{Blocks: []*ThreadBlock{}}
+
+	if text := thread.FinalText(); text != "" {
+		t.Errorf("Expected empty string for empty thread, got %q", text)
+	}
+
+	thread.Text("text_1", "Hello")
+	thread.Complete("text_1")
+	if text := thread.FinalText(); text != "Hello" {
+		t.Errorf("Expected 'Hello', got %q", text)
+	}
+
+	thread.Text("text_2", " World")
+	thread.Complete("text_2")
+	if text := thread.FinalText(); text != " World" {
+		t.Errorf("Expected ' World', got %q", text)
+	}
+
+	thread.Input("user message")
+	if text := thread.FinalText(); text != " World" {
+		t.Errorf("Expected ' World' (last text block), got %q", text)
+	}
+}
+
+func TestUnit_Thread_FinalText_IncompleteBlock(t *testing.T) {
+	thread := &Thread{Blocks: []*ThreadBlock{}}
+	thread.Text("text_1", "Complete")
+	thread.Complete("text_1")
+	thread.Text("text_2", "Incomplete")
+
+	if text := thread.FinalText(); text != "Complete" {
+		t.Errorf("Expected 'Complete' (last complete text block), got %q", text)
+	}
+}

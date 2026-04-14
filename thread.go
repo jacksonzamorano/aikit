@@ -9,8 +9,8 @@ import (
 // Effort is for string-based providers (e.g., OpenAI's "low"/"medium"/"high").
 // Budget is for integer-based token budgets.
 type ReasoningConfig struct {
-	Effort string `json:"effort,omitempty" xml:"effort,attr,omitempty"`
-	Budget int    `json:"budget,omitempty" xml:"budget,attr,omitempty"`
+	Effort string `json:"effort,omitempty"`
+	Budget int    `json:"budget,omitempty"`
 }
 
 type Thread struct {
@@ -48,25 +48,6 @@ func (s *Thread) TakeUpdate() bool {
 	return false
 }
 
-// Snapshot represents a serializable snapshot of a Thread's conversation blocks.
-// This is the primary serialization mechanism for persisting conversation history.
-//
-// Usage:
-//
-//	// Save conversation
-//	snapshot := thread.Snapshot()
-//	data, _ := json.Marshal(snapshot)
-//
-//	// Restore conversation
-//	var restored Snapshot
-//	json.Unmarshal(data, &restored)
-//	newThread.Restore(&restored)
-//	// Re-configure: newThread.Model, newThread.Tools, etc.
-type Snapshot struct {
-	Blocks []*ThreadBlock `json:"blocks" xml:"blocks>block"`
-}
-
-// ThreadUsage tracks token and resource usage from inference calls.
 type ThreadUsage struct {
 	CacheReadTokens  int64
 	CacheWriteTokens int64
@@ -146,17 +127,13 @@ func (s *Thread) IncompleteToolCalls() int {
 	return count
 }
 
-// Snapshot creates a serializable snapshot of the Thread's conversation blocks.
-func (s *Thread) Snapshot() *Snapshot {
-	return &Snapshot{
-		Blocks: s.Blocks,
+func (s *Thread) FinalText() string {
+	for i := len(s.Blocks) - 1; i >= 0; i-- {
+		if s.Blocks[i].Type == InferenceBlockText && s.Blocks[i].Complete {
+			return s.Blocks[i].Text
+		}
 	}
-}
-
-// Restore restores the Thread's blocks from a snapshot.
-func (s *Thread) Restore(snapshot *Snapshot) {
-	s.Blocks = make([]*ThreadBlock, len(snapshot.Blocks))
-	copy(s.Blocks, snapshot.Blocks)
+	return ""
 }
 
 func (s *Thread) create(id string, typ ThreadBlockType) *ThreadBlock {
