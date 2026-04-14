@@ -70,7 +70,7 @@ func GoogleProvider(key string) ProviderConfig {
 func OpenRouterProvider(key string) ProviderConfig {
 	return ProviderConfig{
 		Name:                "openrouter",
-		BaseURL:             "https://openrouter.ai/api/v1",
+		BaseURL:             "https://openrouter.ai/api",
 		APIKey:              key,
 		MakeSessionFunction: CreateResponsesSession,
 		WebSearchToolName:   "openrouter:web_search",
