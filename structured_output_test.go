@@ -67,26 +67,6 @@ func TestStructuredOutputMessagesRequest(t *testing.T) {
 	}
 }
 
-func TestStructuredOutputAIStudioRequest(t *testing.T) {
-	thread := &Thread{
-		Model:                  "gemini-3-flash-preview",
-		StructuredOutputSchema: exampleStructuredSchema(),
-	}
-
-	request := AIStudioAPIRequest{Config: &ProviderConfig{Name: "google"}}
-	request.InitSession(thread)
-
-	if request.request.GenerationConfig == nil {
-		t.Fatalf("expected generation_config to be set")
-	}
-	if request.request.GenerationConfig.ResponseMimeType != "application/json" {
-		t.Fatalf("unexpected response MIME type: %q", request.request.GenerationConfig.ResponseMimeType)
-	}
-	if request.request.GenerationConfig.ResponseSchema == nil {
-		t.Fatalf("expected response schema to be set")
-	}
-}
-
 func exampleStructuredSchema() *JsonSchema {
 	return &JsonSchema{
 		Type: "object",

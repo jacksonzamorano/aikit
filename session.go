@@ -67,14 +67,6 @@ func CreateCompletionsSession(config *ProviderConfig) *Session {
 		},
 	}
 }
-func CreateAIStudioSession(config *ProviderConfig) *Session {
-	return &Session{
-		Thread: NewProviderState(),
-		Provider: &AIStudioAPIRequest{
-			Config: config,
-		},
-	}
-}
 
 func (s *Session) Stream(onPartial func(*Thread)) *Thread {
 	// Perform one-off initialization

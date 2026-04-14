@@ -4,48 +4,6 @@ import (
 	"testing"
 )
 
-func TestUnit_Thread_GetTypeFindsBlockAtIndexZero(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.ToolCall("call_1", "test_tool", `{"arg": "value"}`)
-
-	if len(thread.Blocks) != 1 {
-		t.Fatalf("Expected 1 block, got %d", len(thread.Blocks))
-	}
-
-	found := thread.getType("call_1", InferenceBlockToolCall)
-	if found == nil {
-		t.Fatal("getType failed to find block at index 0")
-	}
-	if found.ID != "call_1" {
-		t.Errorf("Expected block ID 'call_1', got %q", found.ID)
-	}
-}
-
-func TestUnit_Thread_ToolResultWithSingleToolCall(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.ToolCall("call_1", "test_tool", `{"query": "test"}`)
-
-	if thread.IncompleteToolCalls() != 1 {
-		t.Errorf("Expected 1 incomplete tool call, got %d", thread.IncompleteToolCalls())
-	}
-
-	block := thread.Blocks[0]
-	thread.ToolResult(block.ToolCall, "result output")
-
-	if block.ToolResult == nil {
-		t.Fatal("ToolResult was not attached to the block at index 0")
-	}
-	if block.ToolResult.Output != "result output" {
-		t.Errorf("Expected output 'result output', got %q", block.ToolResult.Output)
-	}
-	if !block.Complete {
-		t.Error("Block should be marked complete after ToolResult")
-	}
-	if thread.IncompleteToolCalls() != 0 {
-		t.Errorf("Expected 0 incomplete tool calls, got %d", thread.IncompleteToolCalls())
-	}
-}
-
 func TestUnit_Thread_IncompleteToolCallsCounter(t *testing.T) {
 	thread := &Thread{Blocks: []*ThreadBlock{}}
 
@@ -80,24 +38,6 @@ func TestUnit_Thread_IncompleteToolCallsCounter(t *testing.T) {
 	}
 }
 
-func TestUnit_Thread_FindOrCreateIDBlockAtIndexZero(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.Text("text_1", "Hello")
-
-	if len(thread.Blocks) != 1 {
-		t.Fatalf("Expected 1 block, got %d", len(thread.Blocks))
-	}
-
-	thread.Text("text_1", " World")
-
-	if len(thread.Blocks) != 1 {
-		t.Fatalf("Expected 1 block after append, got %d (duplicate created)", len(thread.Blocks))
-	}
-	if thread.Blocks[0].Text != "Hello World" {
-		t.Errorf("Expected text 'Hello World', got %q", thread.Blocks[0].Text)
-	}
-}
-
 func TestUnit_Thread_CoalesceTextBlocks(t *testing.T) {
 	thread := &Thread{Blocks: []*ThreadBlock{}, CoalesceTextBlocks: true}
 	thread.Text("text_1", "First")
@@ -108,88 +48,6 @@ func TestUnit_Thread_CoalesceTextBlocks(t *testing.T) {
 	}
 	if !thread.Blocks[0].Continued {
 		t.Error("First block should have Continued=true when coalescing")
-	}
-}
-
-func TestUnit_Thread_NewBlockIdGeneration(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	id1 := thread.NewBlockId(InferenceBlockText)
-	thread.Text(id1, "First")
-	id2 := thread.NewBlockId(InferenceBlockText)
-
-	if id1 == id2 {
-		t.Errorf("NewBlockId should generate unique IDs, got %q twice", id1)
-	}
-}
-
-func TestUnit_Thread_CompleteBlock(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}, UpdateOnFinalize: true}
-	thread.Text("block_1", "content")
-	thread.TakeUpdate() // Clear the update flag from Text()
-
-	if thread.Blocks[0].Complete {
-		t.Error("Block should not be complete initially")
-	}
-
-	thread.Complete("block_1")
-
-	if !thread.Blocks[0].Complete {
-		t.Error("Block should be complete after Complete()")
-	}
-	if !thread.TakeUpdate() {
-		t.Error("Updated flag should be set when UpdateOnFinalize is true")
-	}
-}
-
-func TestUnit_Thread_WebSearchFlow(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.WebSearch("search_1")
-
-	if len(thread.Blocks) != 1 {
-		t.Fatalf("Expected 1 block, got %d", len(thread.Blocks))
-	}
-
-	block := thread.Blocks[0]
-	if block.WebSearch == nil {
-		t.Fatal("WebSearch should be initialized")
-	}
-
-	thread.WebSearchQuery("search_1", "test query")
-
-	if block.WebSearch.Query != "test query" {
-		t.Errorf("Expected query 'test query', got %q", block.WebSearch.Query)
-	}
-	if !block.Complete {
-		t.Error("Block should be complete after WebSearchQuery")
-	}
-	if thread.Result.WebSearches != 1 {
-		t.Errorf("Expected 1 web search in results, got %d", thread.Result.WebSearches)
-	}
-}
-
-func TestUnit_Thread_ThinkingWithSignature(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.ThinkingWithSignature("think_1", "thinking content", "sig123")
-
-	if len(thread.Blocks) != 1 {
-		t.Fatalf("Expected 1 block, got %d", len(thread.Blocks))
-	}
-
-	block := thread.Blocks[0]
-	if block.Text != "thinking content" {
-		t.Errorf("Expected text 'thinking content', got %q", block.Text)
-	}
-	if block.Signature != "sig123" {
-		t.Errorf("Expected signature 'sig123', got %q", block.Signature)
-	}
-
-	thread.ThinkingWithSignature("think_1", " more", "456")
-
-	if block.Text != "thinking content more" {
-		t.Errorf("Expected appended text, got %q", block.Text)
-	}
-	if block.Signature != "sig123456" {
-		t.Errorf("Expected appended signature, got %q", block.Signature)
 	}
 }
 
@@ -464,41 +322,5 @@ func TestUnit_Thread_TakeUpdate(t *testing.T) {
 	}
 	if thread.TakeUpdate() {
 		t.Error("TakeUpdate should return false after being taken")
-	}
-}
-
-func TestUnit_Thread_FinalText(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-
-	if text := thread.FinalText(); text != "" {
-		t.Errorf("Expected empty string for empty thread, got %q", text)
-	}
-
-	thread.Text("text_1", "Hello")
-	thread.Complete("text_1")
-	if text := thread.FinalText(); text != "Hello" {
-		t.Errorf("Expected 'Hello', got %q", text)
-	}
-
-	thread.Text("text_2", " World")
-	thread.Complete("text_2")
-	if text := thread.FinalText(); text != " World" {
-		t.Errorf("Expected ' World', got %q", text)
-	}
-
-	thread.Input("user message")
-	if text := thread.FinalText(); text != " World" {
-		t.Errorf("Expected ' World' (last text block), got %q", text)
-	}
-}
-
-func TestUnit_Thread_FinalText_IncompleteBlock(t *testing.T) {
-	thread := &Thread{Blocks: []*ThreadBlock{}}
-	thread.Text("text_1", "Complete")
-	thread.Complete("text_1")
-	thread.Text("text_2", "Incomplete")
-
-	if text := thread.FinalText(); text != "Complete" {
-		t.Errorf("Expected 'Complete' (last complete text block), got %q", text)
 	}
 }

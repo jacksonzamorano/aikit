@@ -1,14 +1,5 @@
 package aikit
 
-func GoogleProvider(key string) ProviderConfig {
-	return ProviderConfig{
-		Name:                "google",
-		BaseURL:             "https://generativelanguage.googleapis.com",
-		APIKey:              key,
-		MakeSessionFunction: CreateAIStudioSession,
-	}
-}
-
 func OpenAIProvider(key string) ProviderConfig {
 	return ProviderConfig{
 		Name:                "openai",
@@ -64,6 +55,14 @@ func XAIProvider(key string) ProviderConfig {
 	return ProviderConfig{
 		Name:                "xai",
 		BaseURL:             "https://api.x.ai",
+		APIKey:              key,
+		MakeSessionFunction: CreateCompletionsSession,
+	}
+}
+func GoogleProvider(key string) ProviderConfig {
+	return ProviderConfig{
+		Name:                "google",
+		BaseURL:             "https://generativelanguage.googleapis.com/v1beta/openai",
 		APIKey:              key,
 		MakeSessionFunction: CreateCompletionsSession,
 	}

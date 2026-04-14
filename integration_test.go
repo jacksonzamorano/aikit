@@ -15,12 +15,6 @@ import (
 )
 
 // =============================================================================
-// TEST CONFIGURATION
-// =============================================================================
-
-var testDebugEnabled = false
-
-// =============================================================================
 // MODULAR TEST ARCHITECTURE
 // =============================================================================
 
@@ -86,7 +80,6 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 			return fmt.Sprintf("Error: Unknown tool: %s", name)
 		}
 	}
-	session.Debug = testDebugEnabled
 
 	result := session.Stream(func(result *aikit.Thread) {
 		// Streaming hash uniqueness check
@@ -131,7 +124,6 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	if cfg.Reasoning != nil {
 		session.Thread.Reasoning = *cfg.Reasoning
 	}
-	session.Debug = testDebugEnabled
 
 	result := session.Stream(func(result *aikit.Thread) {
 		// Streaming hash uniqueness check
@@ -181,7 +173,6 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	if cfg.Reasoning != nil {
 		session.Thread.Reasoning = *cfg.Reasoning
 	}
-	session.Debug = testDebugEnabled
 
 	result := session.Stream(func(result *aikit.Thread) {
 		all += snapshotResult(*result)
@@ -226,7 +217,6 @@ func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
 		session.Thread.Reasoning = *cfg.Reasoning
 	}
 	session.Thread.CoalesceTextBlocks = true
-	session.Debug = testDebugEnabled
 
 	result := session.Stream(func(result *aikit.Thread) {
 		bytes, _ := json.Marshal(result.Blocks)
@@ -460,181 +450,118 @@ func writeTestRun(name string, results string) {
 }
 
 // =============================================================================
-// ANTHROPIC (MESSAGES API) INTEGRATION TESTS
+// PROVIDER MATRIX
 // =============================================================================
 
-var anthropicReasoning = aikit.ReasoningConfig{Budget: 1024}
-
-func TestIntegration_Anthropic_ToolCall(t *testing.T) {
-	runToolCallValidation(t, integrationTestConfig{
-		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:     "claude-haiku-4-5-20251001",
-		Reasoning: &anthropicReasoning,
-		TestName:  "anthropic",
-	})
+type providerTestCase struct {
+	Name             string
+	Provider         func() aikit.ProviderConfig
+	Model            string
+	Reasoning        *aikit.ReasoningConfig
+	ToolCall         bool
+	WebSearch        bool
+	ImageInput       bool
+	StructuredOutput bool
 }
 
-func TestIntegration_Anthropic_WebSearch(t *testing.T) {
-	runWebSearchValidation(t, integrationTestConfig{
-		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:     "claude-haiku-4-5-20251001",
-		Reasoning: &anthropicReasoning,
-		TestName:  "anthropic",
-	})
-}
-
-func TestIntegration_Anthropic_ImageInput(t *testing.T) {
-	runImageInputValidation(t, integrationTestConfig{
-		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:     "claude-haiku-4-5-20251001",
-		Reasoning: &anthropicReasoning,
-		TestName:  "anthropic",
-	})
-}
-
-func TestIntegration_Anthropic_StructuredOutput(t *testing.T) {
-	runStructuredOutputValidation(t, integrationTestConfig{
-		Provider:  aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")),
-		Model:     "claude-haiku-4-5-20251001",
-		Reasoning: &anthropicReasoning,
-		TestName:  "anthropic",
-	})
-}
-
-// =============================================================================
-// OPENAI (RESPONSES API) INTEGRATION TESTS
-// =============================================================================
-
-var openaiReasoning = aikit.ReasoningConfig{Effort: "low"}
-
-func TestIntegration_OpenAI_ToolCall(t *testing.T) {
-	runToolCallValidation(t, integrationTestConfig{
-		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:     "gpt-5-nano",
-		Reasoning: &openaiReasoning,
-		TestName:  "openai",
-	})
-}
-
-func TestIntegration_OpenAI_WebSearch(t *testing.T) {
-	runWebSearchValidation(t, integrationTestConfig{
-		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:     "gpt-5-nano",
-		Reasoning: &openaiReasoning,
-		TestName:  "openai",
-	})
-}
-
-func TestIntegration_OpenAI_ImageInput(t *testing.T) {
-	runImageInputValidation(t, integrationTestConfig{
-		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:     "gpt-5-nano",
-		Reasoning: &openaiReasoning,
-		TestName:  "openai",
-	})
-}
-
-func TestIntegration_OpenAI_StructuredOutput(t *testing.T) {
-	runStructuredOutputValidation(t, integrationTestConfig{
-		Provider:  aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")),
-		Model:     "gpt-5-nano",
-		Reasoning: &openaiReasoning,
-		TestName:  "openai",
-	})
+var integrationProviders = []providerTestCase{
+	{
+		Name:             "Anthropic",
+		Provider:         func() aikit.ProviderConfig { return aikit.AnthropicProvider(os.Getenv("ANTHROPIC_KEY")) },
+		Model:            "claude-haiku-4-5-20251001",
+		Reasoning:        &aikit.ReasoningConfig{Budget: 1024},
+		ToolCall:         true,
+		WebSearch:        true,
+		ImageInput:       true,
+		StructuredOutput: true,
+	},
+	{
+		Name:             "OpenAI",
+		Provider:         func() aikit.ProviderConfig { return aikit.OpenAIVerifiedProvider(os.Getenv("OPENAI_KEY")) },
+		Model:            "gpt-5-nano",
+		Reasoning:        &aikit.ReasoningConfig{Effort: "low"},
+		ToolCall:         true,
+		WebSearch:        true,
+		ImageInput:       true,
+		StructuredOutput: true,
+	},
+	{
+		Name:             "Google",
+		Provider:         func() aikit.ProviderConfig { return aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")) },
+		Model:            "gemini-3-flash-preview",
+		Reasoning:        &aikit.ReasoningConfig{Effort: "low"},
+		ToolCall:         true,
+		StructuredOutput: true,
+	},
+	{
+		Name:             "Groq",
+		Provider:         func() aikit.ProviderConfig { return aikit.GroqProvider(os.Getenv("GROQ_KEY")) },
+		Model:            "openai/gpt-oss-20b",
+		ToolCall:         true,
+		StructuredOutput: true,
+	},
+	{
+		Name:             "Fireworks",
+		Provider:         func() aikit.ProviderConfig { return aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")) },
+		Model:            "accounts/fireworks/models/gpt-oss-20b",
+		Reasoning:        &aikit.ReasoningConfig{Effort: "low"},
+		ToolCall:         true,
+		StructuredOutput: true,
+	},
+	{
+		Name:             "XAI",
+		Provider:         func() aikit.ProviderConfig { return aikit.XAIProvider(os.Getenv("XAI_KEY")) },
+		Model:            "grok-4-1-fast-reasoning-latest",
+		ToolCall:         true,
+		ImageInput:       true,
+		StructuredOutput: true,
+	},
+	{
+		Name:             "OpenRouter",
+		Provider:         func() aikit.ProviderConfig { return aikit.OpenRouterProvider(os.Getenv("OPENROUTER_KEY")) },
+		Model:            "openrouter/elephant-alpha",
+		Reasoning:        &aikit.ReasoningConfig{Effort: "low"},
+		ToolCall:         true,
+		WebSearch:        true,
+		ImageInput:       true,
+		StructuredOutput: true,
+	},
 }
 
 // =============================================================================
-// GOOGLE (AI STUDIO API) INTEGRATION TESTS
+// INTEGRATION TEST RUNNER
 // =============================================================================
 
-var googleReasoning = aikit.ReasoningConfig{Budget: 1024}
-
-func TestIntegration_Google_ToolCall(t *testing.T) {
-	runToolCallValidation(t, integrationTestConfig{
-		Provider:  aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")),
-		Model:     "gemini-3-flash-preview",
-		Reasoning: &googleReasoning,
-		TestName:  "google",
-	})
-}
-
-func TestIntegration_Google_StructuredOutput(t *testing.T) {
-	runStructuredOutputValidation(t, integrationTestConfig{
-		Provider:  aikit.GoogleProvider(os.Getenv("GOOGLE_KEY")),
-		Model:     "gemini-3-flash-preview",
-		Reasoning: &googleReasoning,
-		TestName:  "google",
-	})
-}
-
-// =============================================================================
-// GROQ (COMPLETIONS API) INTEGRATION TESTS
-// =============================================================================
-
-func TestIntegration_Groq_ToolCall(t *testing.T) {
-	runToolCallValidation(t, integrationTestConfig{
-		Provider: aikit.GroqProvider(os.Getenv("GROQ_KEY")),
-		Model:    "openai/gpt-oss-20b",
-		TestName: "groq",
-	})
-}
-
-func TestIntegration_Groq_StructuredOutput(t *testing.T) {
-	runStructuredOutputValidation(t, integrationTestConfig{
-		Provider: aikit.GroqProvider(os.Getenv("GROQ_KEY")),
-		Model:    "openai/gpt-oss-20b",
-		TestName: "groq",
-	})
-}
-
-// =============================================================================
-// FIREWORKS (COMPLETIONS API) INTEGRATION TESTS
-// =============================================================================
-
-var fireworksReasoning = aikit.ReasoningConfig{Effort: "low"}
-
-func TestIntegration_Fireworks_ToolCall(t *testing.T) {
-	runToolCallValidation(t, integrationTestConfig{
-		Provider:  aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")),
-		Model:     "accounts/fireworks/models/gpt-oss-20b",
-		Reasoning: &fireworksReasoning,
-		TestName:  "fireworks",
-	})
-}
-
-func TestIntegration_Fireworks_StructuredOutput(t *testing.T) {
-	runStructuredOutputValidation(t, integrationTestConfig{
-		Provider:  aikit.FireworksProvider(os.Getenv("FIREWORKS_KEY")),
-		Model:     "accounts/fireworks/models/gpt-oss-20b",
-		Reasoning: &fireworksReasoning,
-		TestName:  "fireworks",
-	})
-}
-
-// =============================================================================
-// XAI (COMPLETIONS API) INTEGRATION TESTS
-// =============================================================================
-
-func TestIntegration_XAI_ToolCall(t *testing.T) {
-	runToolCallValidation(t, integrationTestConfig{
-		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
-		Model:    "grok-4-1-fast-reasoning-latest",
-		TestName: "xai",
-	})
-}
-
-func TestIntegration_XAI_StructuredOutput(t *testing.T) {
-	runStructuredOutputValidation(t, integrationTestConfig{
-		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
-		Model:    "grok-4-1-fast-reasoning-latest",
-		TestName: "xai",
-	})
-}
-
-func TestIntegration_XAI_ImageInput(t *testing.T) {
-	runImageInputValidation(t, integrationTestConfig{
-		Provider: aikit.XAIProvider(os.Getenv("XAI_KEY")),
-		Model:    "grok-4-1-fast-reasoning-latest",
-		TestName: "xai",
-	})
+func TestIntegration(t *testing.T) {
+	for _, tc := range integrationProviders {
+		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
+			cfg := integrationTestConfig{
+				Provider:  tc.Provider(),
+				Model:     tc.Model,
+				Reasoning: tc.Reasoning,
+				TestName:  strings.ToLower(tc.Name),
+			}
+			if tc.ToolCall {
+				t.Run("ToolCall", func(t *testing.T) {
+					runToolCallValidation(t, cfg)
+				})
+			}
+			if tc.WebSearch {
+				t.Run("WebSearch", func(t *testing.T) {
+					runWebSearchValidation(t, cfg)
+				})
+			}
+			if tc.ImageInput {
+				t.Run("ImageInput", func(t *testing.T) {
+					runImageInputValidation(t, cfg)
+				})
+			}
+			if tc.StructuredOutput {
+				t.Run("StructuredOutput", func(t *testing.T) {
+					runStructuredOutputValidation(t, cfg)
+				})
+			}
+		})
+	}
 }
