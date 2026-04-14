@@ -83,16 +83,16 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	})
 
 	var result *aikit.Session
-	for update := range session.Stream(context.Background()) {
+	for ev := range session.StreamAll(context.Background()) {
+		result = ev.Session
 		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(update.GetBlocks())
+		bytes, _ := json.Marshal(result.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-		result = update
 	}
 	all := snapshotResult(result)
 
@@ -129,16 +129,16 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	}
 
 	var result *aikit.Session
-	for update := range session.Stream(context.Background()) {
+	for ev := range session.StreamAll(context.Background()) {
+		result = ev.Session
 		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(update.GetBlocks())
+		bytes, _ := json.Marshal(result.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-		result = update
 	}
 	all := snapshotResult(result)
 
@@ -180,18 +180,18 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	}
 
 	var result *aikit.Session
-	for update := range session.Stream(context.Background()) {
-		all += snapshotResult(update)
+	for ev := range session.StreamAll(context.Background()) {
+		result = ev.Session
+		all += snapshotResult(result)
 
 		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(update.GetBlocks())
+		bytes, _ := json.Marshal(result.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-		result = update
 	}
 
 	// Write test run data
@@ -225,15 +225,15 @@ func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
 	session.SetCoalesceTextBlocks(true)
 
 	var result *aikit.Session
-	for update := range session.Stream(context.Background()) {
-		bytes, _ := json.Marshal(update.GetBlocks())
+	for ev := range session.StreamAll(context.Background()) {
+		result = ev.Session
+		bytes, _ := json.Marshal(result.GetBlocks())
 		hash := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(hash[:])
 		if currentHash == lastHash && lastHash != "" {
 			t.Errorf("Streaming callback received duplicate data")
 		}
 		lastHash = currentHash
-		result = update
 	}
 	all := snapshotResult(result)
 
