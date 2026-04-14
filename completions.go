@@ -107,16 +107,24 @@ func (p *CompletionsAPIRequest) Update(block *ThreadBlock) {
 			},
 		})
 	case InferenceBlockToolCall:
-		p.request.Messages = append(p.request.Messages, CompletionsMessage{
-			Role: "assistant",
-			ToolCalls: []CompletionsToolCall{{
-				Id:   block.ID,
-				Type: "function",
-				Function: &CompletionsToolCallFunction{
-					Name:      block.ToolCall.Name,
-					Arguments: block.ToolCall.Arguments,
+		tc := CompletionsToolCall{
+			Id:   block.ID,
+			Type: "function",
+			Function: &CompletionsToolCallFunction{
+				Name:      block.ToolCall.Name,
+				Arguments: block.ToolCall.Arguments,
+			},
+		}
+		if block.Signature != "" {
+			tc.ExtraContent = &CompletionsExtraContent{
+				Google: &CompletionsGoogleExtra{
+					ThoughtSignature: block.Signature,
 				},
-			}},
+			}
+		}
+		p.request.Messages = append(p.request.Messages, CompletionsMessage{
+			Role:      "assistant",
+			ToolCalls: []CompletionsToolCall{tc},
 		})
 		if block.ToolResult != nil {
 			p.request.Messages = append(p.request.Messages, CompletionsMessage{
@@ -173,7 +181,11 @@ func (p *CompletionsAPIRequest) OnChunk(data []byte, thread *Thread) ChunkResult
 			}
 
 			if tc.Function != nil {
-				thread.ToolCall(toolId, tc.Function.Name, tc.Function.Arguments)
+				if tc.ExtraContent != nil && tc.ExtraContent.Google != nil && tc.ExtraContent.Google.ThoughtSignature != "" {
+					thread.ToolCallWithThinking(toolId, tc.Function.Name, tc.Function.Arguments, "", tc.ExtraContent.Google.ThoughtSignature)
+				} else {
+					thread.ToolCall(toolId, tc.Function.Name, tc.Function.Arguments)
+				}
 			}
 		}
 		if choice.FinishReason != nil {

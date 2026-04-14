@@ -34,7 +34,7 @@ func GroqProvider(key string) ProviderConfig {
 		Name:                "groq",
 		BaseURL:             "https://api.groq.com/openai",
 		APIKey:              key,
-		MakeSessionFunction: CreateResponsesSession,
+		MakeSessionFunction: CreateCompletionsSession,
 	}
 }
 func AnthropicProvider(key string) ProviderConfig {

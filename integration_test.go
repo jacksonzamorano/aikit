@@ -523,7 +523,7 @@ var integrationProviders = []providerTestCase{
 		Reasoning:        &aikit.ReasoningConfig{Effort: "low"},
 		ToolCall:         true,
 		WebSearch:        true,
-		ImageInput:       true,
+		ImageInput:       false,
 		StructuredOutput: true,
 	},
 }

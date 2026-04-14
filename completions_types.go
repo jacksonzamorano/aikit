@@ -57,10 +57,19 @@ type CompletionsResponse struct {
 type CompletionsChoice struct {
 	Message CompletionsMessage `json:"message"`
 }
+type CompletionsGoogleExtra struct {
+	ThoughtSignature string `json:"thought_signature,omitempty"`
+}
+
+type CompletionsExtraContent struct {
+	Google *CompletionsGoogleExtra `json:"google,omitempty"`
+}
+
 type CompletionsToolCall struct {
-	Id       string                       `json:"id"`
-	Type     string                       `json:"type"`
-	Function *CompletionsToolCallFunction `json:"function,omitempty"`
+	Id           string                       `json:"id"`
+	Type         string                       `json:"type"`
+	Function     *CompletionsToolCallFunction `json:"function,omitempty"`
+	ExtraContent *CompletionsExtraContent     `json:"extra_content,omitempty"`
 }
 type CompletionsToolCallFunction struct {
 	Name      string `json:"name"`
@@ -86,10 +95,11 @@ type CompletionsStreamDelta struct {
 }
 
 type CompletionsToolCallDelta struct {
-	Index    int                               `json:"index,omitempty"`
-	Id       string                            `json:"id,omitempty"`
-	Type     string                            `json:"type,omitempty"`
-	Function *CompletionsToolCallFunctionDelta `json:"function,omitempty"`
+	Index        int                               `json:"index,omitempty"`
+	Id           string                            `json:"id,omitempty"`
+	Type         string                            `json:"type,omitempty"`
+	Function     *CompletionsToolCallFunctionDelta `json:"function,omitempty"`
+	ExtraContent *CompletionsExtraContent          `json:"extra_content,omitempty"`
 }
 
 type CompletionsToolCallFunctionDelta struct {
