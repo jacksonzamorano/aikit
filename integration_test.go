@@ -248,10 +248,10 @@ func validateBasicResults(t *testing.T, result *aikit.Thread) {
 		t.Error(result.Error)
 	}
 	if result.Result.OutputTokens == 0 {
-		t.Fatalf("Received no output tokens.")
+		t.Fatalf("Received no output tokens: '%s'.", result.Error)
 	}
 	if result.Result.InputTokens == 0 {
-		t.Fatalf("Received no input tokens.")
+		t.Fatalf("Received no input tokens '%s'.", result.Error)
 	}
 }
 
