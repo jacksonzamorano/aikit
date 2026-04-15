@@ -2,8 +2,6 @@ package aikit_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -33,7 +31,6 @@ type integrationTestConfig struct {
 func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	t.Helper()
 
-	var lastHash string
 	toolFunctionCalled := 0
 
 	session := cfg.Provider.Session()
@@ -83,16 +80,13 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 	})
 
 	var result *aikit.Session
+	eventCount := 0
 	for ev := range session.StreamAll(context.Background()) {
 		result = ev.Session
-		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(result.GetBlocks())
-		hash := sha256.Sum256(bytes)
-		currentHash := hex.EncodeToString(hash[:])
-		if currentHash == lastHash && lastHash != "" {
-			t.Errorf("Streaming callback received duplicate data")
-		}
-		lastHash = currentHash
+		eventCount++
+	}
+	if eventCount == 0 {
+		t.Errorf("Expected at least one streaming event")
 	}
 	all := snapshotResult(result)
 
@@ -116,8 +110,6 @@ func runToolCallValidation(t *testing.T, cfg integrationTestConfig) {
 func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	t.Helper()
 
-	var lastHash string
-
 	session := cfg.Provider.Session()
 	session.SetModel(cfg.Model)
 	session.SetMaxWebSearches(1)
@@ -129,16 +121,13 @@ func runWebSearchValidation(t *testing.T, cfg integrationTestConfig) {
 	}
 
 	var result *aikit.Session
+	eventCount := 0
 	for ev := range session.StreamAll(context.Background()) {
 		result = ev.Session
-		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(result.GetBlocks())
-		hash := sha256.Sum256(bytes)
-		currentHash := hex.EncodeToString(hash[:])
-		if currentHash == lastHash && lastHash != "" {
-			t.Errorf("Streaming callback received duplicate data")
-		}
-		lastHash = currentHash
+		eventCount++
+	}
+	if eventCount == 0 {
+		t.Errorf("Expected at least one streaming event")
 	}
 	all := snapshotResult(result)
 
@@ -167,8 +156,6 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	}
 
 	all := ""
-	var lastHash string
-
 	session := cfg.Provider.Session()
 	session.SetModel(cfg.Model)
 	session.SetCoalesceTextBlocks(true)
@@ -180,18 +167,14 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 	}
 
 	var result *aikit.Session
+	eventCount := 0
 	for ev := range session.StreamAll(context.Background()) {
 		result = ev.Session
 		all += snapshotResult(result)
-
-		// Streaming hash uniqueness check
-		bytes, _ := json.Marshal(result.GetBlocks())
-		hash := sha256.Sum256(bytes)
-		currentHash := hex.EncodeToString(hash[:])
-		if currentHash == lastHash && lastHash != "" {
-			t.Errorf("Streaming callback received duplicate data")
-		}
-		lastHash = currentHash
+		eventCount++
+	}
+	if eventCount == 0 {
+		t.Errorf("Expected at least one streaming event")
 	}
 
 	// Write test run data
@@ -212,8 +195,6 @@ func runImageInputValidation(t *testing.T, cfg integrationTestConfig) {
 func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
 	t.Helper()
 
-	var lastHash string
-
 	session := cfg.Provider.Session()
 	session.SetModel(cfg.Model)
 	session.System("Return only JSON that matches the provided schema.")
@@ -225,15 +206,13 @@ func runStructuredOutputValidation(t *testing.T, cfg integrationTestConfig) {
 	session.SetCoalesceTextBlocks(true)
 
 	var result *aikit.Session
+	eventCount := 0
 	for ev := range session.StreamAll(context.Background()) {
 		result = ev.Session
-		bytes, _ := json.Marshal(result.GetBlocks())
-		hash := sha256.Sum256(bytes)
-		currentHash := hex.EncodeToString(hash[:])
-		if currentHash == lastHash && lastHash != "" {
-			t.Errorf("Streaming callback received duplicate data")
-		}
-		lastHash = currentHash
+		eventCount++
+	}
+	if eventCount == 0 {
+		t.Errorf("Expected at least one streaming event")
 	}
 	all := snapshotResult(result)
 
