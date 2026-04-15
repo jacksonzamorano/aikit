@@ -198,15 +198,6 @@ func (s *Session) stream(ctx context.Context) <-chan StreamEvent {
 	go func() {
 		defer close(ch)
 
-		emit := func(kind StreamEventKind, block *ThreadBlock, err error) {
-			ch <- StreamEvent{
-				Kind:    kind,
-				Block:   block,
-				Session: s,
-				Error:   err,
-			}
-		}
-
 		state := s.streamState()
 		s.Provider.InitSession(state)
 		state.SetCurrentProvider(s.Provider.Name())
@@ -243,26 +234,33 @@ func (s *Session) stream(ctx context.Context) <-chan StreamEvent {
 			transport.Configure(payload)
 			if err := transport.Start(ctx); err != nil {
 				s.data.setError(err)
-				emit(EventError, nil, err)
+				ch <- StreamEvent{Kind: EventError, Session: s, Error: err}
 				return
 			}
 
-			streamErr := processStream(
+			errored := false
+			for ev := range processStream(
 				transport, s.Provider, state,
 				func() []*ThreadBlock { return s.data.blocks },
-				emit, s.Debug,
-			)
+				s.Debug,
+			) {
+				ev.Session = s
+				ch <- ev
+				if ev.Kind == EventError {
+					s.data.setError(ev.Error)
+					errored = true
+				}
+			}
 			if s.Debug {
 				dbg, _ := json.MarshalIndent(s.data, "", "  ")
 				log.Printf("[Session] %s", string(dbg))
 			}
-			if streamErr != nil {
-				s.data.setError(streamErr)
-				emit(EventError, nil, streamErr)
+			if errored {
 				return
-			} else if state.IncompleteToolCalls() == 0 {
+			}
+			if state.IncompleteToolCalls() == 0 {
 				s.data.success = true
-				emit(EventDone, nil, nil)
+				ch <- StreamEvent{Kind: EventDone, Session: s}
 				return
 			}
 		}

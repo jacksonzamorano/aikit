@@ -15,18 +15,13 @@ type SSETransport struct {
 	providerName string
 	url          string
 	headers      http.Header
-	parseError func(int, []byte) *AIError
+	parseError   func(int, []byte) *AIError
 
 	payload []byte
 	body    io.ReadCloser
 
 	// Channel bridge from readSSE goroutine to pull-based ReadChunk.
-	chunks chan sseChunkOrErr
-}
-
-type sseChunkOrErr struct {
-	data []byte
-	err  error
+	chunks <-chan sseChunkOrErr
 }
 
 // NewSSETransport creates a Transport that sends HTTP POST requests and
@@ -97,28 +92,7 @@ func (t *SSETransport) Start(ctx context.Context) error {
 	}
 
 	t.body = resp.Body
-	t.chunks = make(chan sseChunkOrErr, 1)
-
-	go func() {
-		defer close(t.chunks)
-		sseErr := readSSE(t.providerName, resp.Body, func(ev sseEvent) (bool, error) {
-			if len(ev.data) == 0 {
-				return true, nil
-			}
-			if string(ev.data) == "[DONE]" {
-				return false, nil
-			}
-			// Copy data — readSSE reuses its internal buffer.
-			cp := make([]byte, len(ev.data))
-			copy(cp, ev.data)
-			t.chunks <- sseChunkOrErr{data: cp}
-			return true, nil
-		})
-		if sseErr != nil {
-			t.chunks <- sseChunkOrErr{err: sseErr}
-		}
-	}()
-
+	t.chunks = readSSE(t.providerName, resp.Body)
 	return nil
 }
 

@@ -7,76 +7,84 @@ import (
 
 // processStream pulls chunks from the transport, passes each through
 // provider.OnChunk, and emits block lifecycle events (new, updated,
-// completed). Returns nil on clean completion, or an error.
+// completed) on the returned channel. The channel is closed when the
+// stream ends or an error occurs.
 func processStream(
 	transport Transport,
 	provider APIRequest,
 	state *StreamState,
 	blocks func() []*ThreadBlock,
-	emit func(StreamEventKind, *ThreadBlock, error),
 	debug bool,
-) error {
-	blks := blocks()
-	prevBlockCount := len(blks)
-	completedSet := make(map[int]bool)
-	for i, b := range blks {
-		if b.Complete {
-			completedSet[i] = true
-		}
-	}
+) <-chan StreamEvent {
+	ch := make(chan StreamEvent, 1)
+	go func() {
+		defer close(ch)
 
-	for {
-		data, err := transport.ReadChunk()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		if debug {
-			log.Printf("[Session] SSE Event: %s", string(data))
-		}
-
-		result := provider.OnChunk(data, state)
-		updated := state.TakeUpdate()
-		blks = blocks()
-
-		// Detect new blocks.
-		emittedAny := false
-		for i := prevBlockCount; i < len(blks); i++ {
-			emit(EventBlockNew, blks[i], nil)
-			emittedAny = true
-			if blks[i].Complete {
+		blks := blocks()
+		prevBlockCount := len(blks)
+		completedSet := make(map[int]bool)
+		for i, b := range blks {
+			if b.Complete {
 				completedSet[i] = true
 			}
 		}
-		prevBlockCount = len(blks)
 
-		// Detect newly completed blocks.
-		for i := range blks {
-			if blks[i].Complete && !completedSet[i] {
-				emit(EventBlockCompleted, blks[i], nil)
-				completedSet[i] = true
+		for {
+			data, err := transport.ReadChunk()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				ch <- StreamEvent{Kind: EventError, Error: err}
+				return
+			}
+
+			if debug {
+				log.Printf("[Session] SSE Event: %s", string(data))
+			}
+
+			result := provider.OnChunk(data, state)
+			updated := state.TakeUpdate()
+			blks = blocks()
+
+			// Detect new blocks.
+			emittedAny := false
+			for i := prevBlockCount; i < len(blks); i++ {
+				ch <- StreamEvent{Kind: EventBlockNew, Block: blks[i]}
 				emittedAny = true
-			}
-		}
-
-		// If something updated but no new/completed events, emit update.
-		if updated && !emittedAny {
-			for i := len(blks) - 1; i >= 0; i-- {
-				if !blks[i].Complete {
-					emit(EventBlockUpdated, blks[i], nil)
-					break
+				if blks[i].Complete {
+					completedSet[i] = true
 				}
 			}
-		}
+			prevBlockCount = len(blks)
 
-		if result.Error != nil {
-			return result.Error
+			// Detect newly completed blocks.
+			for i := range blks {
+				if blks[i].Complete && !completedSet[i] {
+					ch <- StreamEvent{Kind: EventBlockCompleted, Block: blks[i]}
+					completedSet[i] = true
+					emittedAny = true
+				}
+			}
+
+			// If something updated but no new/completed events, emit update.
+			if updated && !emittedAny {
+				for i := len(blks) - 1; i >= 0; i-- {
+					if !blks[i].Complete {
+						ch <- StreamEvent{Kind: EventBlockUpdated, Block: blks[i]}
+						break
+					}
+				}
+			}
+
+			if result.Error != nil {
+				ch <- StreamEvent{Kind: EventError, Error: result.Error}
+				return
+			}
+			if result.Done {
+				return
+			}
 		}
-		if result.Done {
-			return nil
-		}
-	}
+	}()
+	return ch
 }
