@@ -4,16 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"io"
 	"log"
-	"net/http"
-)
-
-type GatewayTransport string
-
-const (
-	TransportSSE GatewayTransport = "sse"
 )
 
 type ChunkResult struct {
@@ -220,14 +211,10 @@ func (s *Session) stream(ctx context.Context) <-chan StreamEvent {
 		s.Provider.InitSession(state)
 		state.SetCurrentProvider(s.Provider.Name())
 
+		transport := s.Provider.MakeTransport()
+		defer transport.Close()
+
 		lastBlock := 0
-		prevBlockCount := len(s.data.blocks)
-		completedSet := make(map[int]bool)
-		for i, b := range s.data.blocks {
-			if b.Complete {
-				completedSet[i] = true
-			}
-		}
 
 		for {
 			s.Provider.PrepareForUpdates()
@@ -252,106 +239,31 @@ func (s *Session) stream(ctx context.Context) <-chan StreamEvent {
 				lastBlock++
 			}
 
-			req := s.Provider.MakeRequest(state).WithContext(ctx)
-			resp, err := http.DefaultClient.Do(req)
-			if s.Debug {
-				log.Printf("[Session] Request made to %s", req.URL.String())
-			}
-			if err != nil {
+			payload := s.Provider.EncodeRequest(state)
+			transport.Configure(payload)
+			if err := transport.Start(ctx); err != nil {
 				s.data.setError(err)
 				emit(EventError, nil, err)
 				return
 			}
-			if resp.StatusCode >= 300 {
-				body, _ := io.ReadAll(resp.Body)
-				var apiErr error
-				if parsedErr := s.Provider.ParseHttpError(resp.StatusCode, body); parsedErr != nil {
-					s.data.setError(parsedErr)
-					apiErr = parsedErr
-				} else {
-					httpErr := &AIError{
-						Category: AIErrorCategoryHTTPStatus,
-						Message:  fmt.Sprintf("Unhandled error. Received status code %d with body %s", resp.StatusCode, string(body)),
-						Provider: s.Provider.Name(),
-					}
-					s.data.setError(httpErr)
-					apiErr = httpErr
-				}
-				emit(EventError, nil, apiErr)
-				return
-			}
+
+			streamErr := processStream(
+				transport, s.Provider, state,
+				func() []*ThreadBlock { return s.data.blocks },
+				emit, s.Debug,
+			)
 			if s.Debug {
-				log.Printf("[Session] Response status: %s", resp.Status)
+				dbg, _ := json.MarshalIndent(s.data, "", "  ")
+				log.Printf("[Session] %s", string(dbg))
 			}
-			defer resp.Body.Close()
-			transport := s.Provider.Transport()
-			switch transport {
-			case TransportSSE:
-				sseErr := readSSE(s.Provider.Name(), resp.Body, func(ev sseEvent) (bool, error) {
-					if len(ev.data) == 0 {
-						return true, nil
-					}
-					if string(ev.data) == "[DONE]" {
-						return false, nil
-					}
-					if s.Debug {
-						log.Printf("[Session] SSE Event: %s", string(ev.data))
-					}
-					result := s.Provider.OnChunk(ev.data, state)
-					updated := state.TakeUpdate()
-
-					// Detect new blocks
-					emittedAny := false
-					for i := prevBlockCount; i < len(s.data.blocks); i++ {
-						emit(EventBlockNew, s.data.blocks[i], nil)
-						emittedAny = true
-						if s.data.blocks[i].Complete {
-							completedSet[i] = true
-						}
-					}
-					prevBlockCount = len(s.data.blocks)
-
-					// Detect newly completed blocks
-					for i := range s.data.blocks {
-						if s.data.blocks[i].Complete && !completedSet[i] {
-							emit(EventBlockCompleted, s.data.blocks[i], nil)
-							completedSet[i] = true
-							emittedAny = true
-						}
-					}
-
-					// If something updated but no new/completed events, emit update
-					if updated && !emittedAny {
-						// Find the last non-complete block as the one being updated
-						for i := len(s.data.blocks) - 1; i >= 0; i-- {
-							if !s.data.blocks[i].Complete {
-								emit(EventBlockUpdated, s.data.blocks[i], nil)
-								break
-							}
-						}
-					}
-
-					if result.Error != nil {
-						return false, result.Error
-					}
-					if result.Done {
-						return false, nil
-					}
-					return true, nil
-				})
-				if s.Debug {
-					dbg, _ := json.MarshalIndent(s.data, "", "  ")
-					log.Printf("[Session] %s", string(dbg))
-				}
-				if sseErr != nil {
-					s.data.setError(sseErr)
-					emit(EventError, nil, sseErr)
-					return
-				} else if state.IncompleteToolCalls() == 0 {
-					s.data.success = true
-					emit(EventDone, nil, nil)
-					return
-				}
+			if streamErr != nil {
+				s.data.setError(streamErr)
+				emit(EventError, nil, streamErr)
+				return
+			} else if state.IncompleteToolCalls() == 0 {
+				s.data.success = true
+				emit(EventDone, nil, nil)
+				return
 			}
 		}
 	}()

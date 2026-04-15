@@ -1,7 +1,6 @@
 package aikit
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,10 +29,6 @@ func (p *MessagesAPIRequest) blockId(thread *StreamState, index int) string {
 
 func (p *MessagesAPIRequest) Name() string {
 	return fmt.Sprintf("messages.%s", p.Config.Name)
-}
-
-func (p *MessagesAPIRequest) Transport() GatewayTransport {
-	return TransportSSE
 }
 
 func (p *MessagesAPIRequest) PrepareForUpdates() {}
@@ -187,19 +182,22 @@ func (p *MessagesAPIRequest) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *MessagesAPIRequest) MakeRequest(thread *StreamState) *http.Request {
-	endpoint := p.Config.resolveEndpoint("/v1/messages")
+func (p *MessagesAPIRequest) EncodeRequest(state *StreamState) []byte {
 	body, _ := json.Marshal(p.request)
-	providerReq, _ := http.NewRequest("POST", endpoint, bytes.NewReader(body))
-	providerReq.Header.Add("Content-Type", "application/json")
-	providerReq.Header.Add("Accept", "text/event-stream")
-	if p.Config.APIVersion == "" {
-		providerReq.Header.Add("anthropic-version", "2023-06-01")
-	} else {
-		providerReq.Header.Add("anthropic-version", p.Config.APIVersion)
-	}
+	return body
+}
 
-	providerReq.Header.Add("x-api-key", p.Config.APIKey)
+func (p *MessagesAPIRequest) MakeTransport() Transport {
+	endpoint := p.Config.resolveEndpoint("/v1/messages")
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
+	if p.Config.APIVersion == "" {
+		headers.Set("anthropic-version", "2023-06-01")
+	} else {
+		headers.Set("anthropic-version", p.Config.APIVersion)
+	}
+	headers.Set("x-api-key", p.Config.APIKey)
 	if p.request.OutputFormat != nil || len(p.Config.BetaFeatures) > 0 {
 		features := make([]string, 0, len(p.Config.BetaFeatures)+1)
 		features = append(features, p.Config.BetaFeatures...)
@@ -210,9 +208,9 @@ func (p *MessagesAPIRequest) MakeRequest(thread *StreamState) *http.Request {
 		if p.Config.Name == "anthropic" {
 			betaHeader = "anthropic-beta"
 		}
-		providerReq.Header.Add(betaHeader, strings.Join(features, ","))
+		headers.Set(betaHeader, strings.Join(features, ","))
 	}
-	return providerReq
+	return NewSSETransport(p.Name(), endpoint, headers, p.ParseHttpError)
 }
 
 func (p *MessagesAPIRequest) OnChunk(data []byte, thread *StreamState) ChunkResult {

@@ -1,7 +1,6 @@
 package aikit
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,10 +15,6 @@ type ResponsesAPIRequest struct {
 func (p *ResponsesAPIRequest) Name() string {
 	return fmt.Sprintf("responses.%s", p.Config.Name)
 }
-func (p *ResponsesAPIRequest) Transport() GatewayTransport {
-	return TransportSSE
-}
-
 func (p *ResponsesAPIRequest) PrepareForUpdates() {
 	p.Request.Inputs = []ResponsesInput{}
 }
@@ -121,13 +116,18 @@ func (p *ResponsesAPIRequest) Update(block *ThreadBlock) {
 	}
 }
 
-func (p *ResponsesAPIRequest) MakeRequest(thread *StreamState) *http.Request {
+func (p *ResponsesAPIRequest) EncodeRequest(state *StreamState) []byte {
 	body, _ := json.Marshal(p.Request)
-	providerReq, _ := http.NewRequest("POST", p.Config.resolveEndpoint("/v1/responses"), bytes.NewReader(body))
-	providerReq.Header.Add("Content-Type", "application/json")
-	providerReq.Header.Add("Accept", "text/event-stream")
-	providerReq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", p.Config.APIKey))
-	return providerReq
+	return body
+}
+
+func (p *ResponsesAPIRequest) MakeTransport() Transport {
+	endpoint := p.Config.resolveEndpoint("/v1/responses")
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Accept", "text/event-stream")
+	headers.Set("Authorization", fmt.Sprintf("Bearer %s", p.Config.APIKey))
+	return NewSSETransport(p.Name(), endpoint, headers, p.ParseHttpError)
 }
 
 func (p *ResponsesAPIRequest) OnChunk(rawData []byte, thread *StreamState) ChunkResult {
